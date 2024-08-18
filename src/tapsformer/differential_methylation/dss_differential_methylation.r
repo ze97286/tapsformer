@@ -1,5 +1,5 @@
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.3 0.01 0.01 4 50 50 raw
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.3 0.01 0.01 4 50 50 raw_with_liver
+# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw
+# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw_with_liver
 
 args <- commandArgs(trailingOnly = TRUE)
 
@@ -109,6 +109,50 @@ combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
 saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
 gc()
 
+analyze_areastat_thresholds <- function(top_hypo_dmrs, output_dir) {
+  flog.info("Analyzing areaStat distribution and thresholds")
+  
+  # Calculate quantiles
+  quantiles <- quantile(top_hypo_dmrs$areaStat, probs = c(0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
+  
+  flog.info("areaStat quantiles:")
+  print(quantiles)
+  
+  # Suggest thresholds
+  moderate_threshold <- quantiles["75%"]
+  strong_threshold <- quantiles["90%"]
+  very_strong_threshold <- quantiles["99%"]
+  
+  flog.info(sprintf("Suggested thresholds for hypomethylation strength:"))
+  flog.info(sprintf("Moderate: < %.2f", moderate_threshold))
+  flog.info(sprintf("Strong: < %.2f", strong_threshold))
+  flog.info(sprintf("Very strong: < %.2f", very_strong_threshold))
+  
+  # Create histogram
+  safe_plot(
+    file.path(output_dir, "areastat_distribution.svg"),
+    function() {
+      p <- ggplot(top_hypo_dmrs, aes(x = areaStat)) +
+        geom_histogram(bins = 50, fill = "skyblue", color = "black") +
+        geom_vline(xintercept = c(moderate_threshold, strong_threshold, very_strong_threshold), 
+                   color = c("green", "orange", "red"), linetype = "dashed") +
+        annotate("text", x = c(moderate_threshold, strong_threshold, very_strong_threshold), 
+                 y = Inf, label = c("Moderate", "Strong", "Very Strong"), 
+                 color = c("green", "orange", "red"), hjust = 1, vjust = 2, angle = 90) +
+        labs(title = "Distribution of areaStat Values",
+             x = "areaStat",
+             y = "Count") +
+        theme_minimal()
+      print(p)
+    }
+  )
+  
+  # Return thresholds
+  return(list(moderate = moderate_threshold, 
+              strong = strong_threshold, 
+              very_strong = very_strong_threshold))
+}
+
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl) {
   output_dir <- file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d", 
                                             delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge))
@@ -151,10 +195,19 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   # Select top hypomethylated DMRs after FDR correction
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
-  setorder(top_hypo_dmrs, -areaStat)
-  
+  setorder(top_hypo_dmrs, -areaStat)  
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, output_dir)
+
+  # You can then use these thresholds in your analysis, e.g.:
+  top_hypo_dmrs[, hypomethylation_strength := case_when(
+    areaStat < thresholds$very_strong ~ "Very Strong",
+    areaStat < thresholds$strong ~ "Strong",
+    areaStat < thresholds$moderate ~ "Moderate",
+    TRUE ~ "Weak"
+  )]
+
   # Write results to BED file
-  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr)], 
+  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)], 
          file.path(output_dir, "hypomethylated_dmrs.bed"), sep = "\t")
 
   # Visualizations

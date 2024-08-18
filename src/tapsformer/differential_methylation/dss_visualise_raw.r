@@ -32,7 +32,7 @@ install_and_load(cran_packages)
 # Print loaded package versions
 sessionInfo()
 
-base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation"
+base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/raw"
 plot_dir <- file.path(base_dir, "plots")
 dir.create(plot_dir, showWarnings = FALSE, recursive = TRUE)
 
