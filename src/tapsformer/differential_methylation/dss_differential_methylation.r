@@ -40,7 +40,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 # Define packages
 bioc_packages <- c("DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
                    "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub")
-cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite")
+cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
 
 # Install and load packages
 bioc_install_and_load(bioc_packages)
@@ -241,6 +241,77 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
   safe_plot(file.path(output_dir, "chromosome_coverage_plot.svg"), function() { print(p) })
+
+
+    # Manhattan Plot
+  create_manhattan_plot <- function(dmr_dt, output_dir) {
+    flog.info("Creating Manhattan plot")
+    safe_plot(
+      file.path(output_dir, "manhattan_plot.svg"),
+      function() {
+        plot <- ggplot(dmr_dt, aes(x = cumpos, y = -log10(pval), color = factor(chr))) +
+          geom_point(alpha = 0.8, size = 1) +
+          scale_x_continuous(label = chr_sizes$chr, breaks = chr_sizes$pos) +
+          scale_color_manual(values = rep(c("#1B9E77", "#D95F02"), 12)) +
+          labs(title = "Manhattan Plot of DMRs",
+              x = "Chromosome",
+              y = "-log10(p-value)") +
+          theme_minimal() +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1),
+                legend.position = "none")
+        print(plot)
+      }
+    )
+  }
+
+  # Q-Q Plot
+  create_qq_plot <- function(dmr_dt, output_dir) {
+    flog.info("Creating Q-Q plot")
+    safe_plot(
+      file.path(output_dir, "qq_plot.svg"),
+      function() {
+        observed <- sort(-log10(dmr_dt$pval))
+        expected <- -log10(ppoints(length(observed)))
+        qq_df <- data.frame(observed = observed, expected = expected)
+        
+        plot <- ggplot(qq_df, aes(x = expected, y = observed)) +
+          geom_point() +
+          geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+          labs(title = "Q-Q Plot of Observed vs Expected p-values",
+              x = "Expected -log10(p-value)",
+              y = "Observed -log10(p-value)") +
+          theme_minimal()
+        print(plot)
+      }
+    )
+  }
+
+  # Heatmap of Top DMRs
+  create_top_dmr_heatmap <- function(combined_bsseq, dmr_dt, output_dir, top_n = 50) {
+    flog.info("Creating heatmap of top DMRs")
+    safe_plot(
+      file.path(output_dir, "top_dmr_heatmap.svg"),
+      function() {
+        top_dmrs <- head(dmr_dt[order(-abs(areaStat))], n = top_n)
+        dmr_ranges <- GRanges(seqnames = top_dmrs$chr, 
+                              ranges = IRanges(start = top_dmrs$start, end = top_dmrs$end))
+        
+        meth_mat <- getMeth(combined_bsseq, regions = dmr_ranges, type = "smooth", what = "perRegion")
+        
+        pheatmap(meth_mat,
+                scale = "none",
+                cluster_rows = TRUE,
+                cluster_cols = TRUE,
+                show_rownames = FALSE,
+                main = paste("Methylation Levels of Top", top_n, "DMRs"),
+                filename = file.path(output_dir, "top_dmr_heatmap.svg"))
+      }
+    )
+  }
+
+  create_manhattan_plot(dmr_dt, output_dir)
+  create_qq_plot(dmr_dt, output_dir)
+  create_top_dmr_heatmap(combined_bsseq, dmr_dt, output_dir)
 
   # Genomic Context Visualization
   flog.info("Annotating DMRs with genomic context")
