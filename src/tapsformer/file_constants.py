@@ -1,0 +1,35 @@
+#!/usr/bin/python3
+
+WORK_DIR = "/mnt/lustre/processed/Lu_lab/OAC_Immuno_Trial/"
+WGS_DIR = WORK_DIR + "WGS_Tissue/Results/"
+CF_TAPS_DIR = WORK_DIR + "TAPS_cfDNA/Results/1.6.1/"
+BAM_LOC = "Alignments/"
+VCF_LOC = "CallSummaryTable/"
+WGS_VCF = WGS_DIR + VCF_LOC
+CF_TAPS_BAM = CF_TAPS_DIR + BAM_LOC
+
+FILTERED_VCF = "/users/zetzioni/sharedscratch/mrd-taps/data/vcf/"
+
+GENOME_DIR = "/mnt/lustre/users/ramess/ref/hg38+HPV+HBV+HVC+EBV+TAPS_SI/"
+GENOME_FILE = GENOME_DIR + "hg38_full_gatk_HPV_HBV_HCV_spike-ins.fa.gz"
+
+TAPSFORMER_WORKING_DIR="/users/zetzioni/sharedscratch/mrd-taps/"
+TAPSFORMER_DATA = TAPSFORMER_WORKING_DIR+"data/"
+TAPSFORMER_DATA_SAMPLES = TAPSFORMER_DATA+"samples/"
+ERROR_DISTRIBUTION_DIR = TAPSFORMER_DATA_SAMPLES+"error_distribution/"
+TRAINING_SAMPLES_OUT = TAPSFORMER_DATA_SAMPLES+"training/"
+ADMIXED_SAMPLES_OUT = TAPSFORMER_DATA_SAMPLES+"admixed/"
+NOISE_SAMPLES_OUT = TAPSFORMER_DATA_SAMPLES+"noise/"
+DENOVO_SAMPLES_OUT = TAPSFORMER_DATA_SAMPLES+"denovo/"
+ADMIXED_SAMPLES_TF_OUT = TAPSFORMER_DATA_SAMPLES+"tf/"
+METHYLATION_SAMPLES_OUT = TAPSFORMER_DATA_SAMPLES+"methylation/"
+
+DENOVO_PREDICTIONS = TAPSFORMER_DATA+"denovo/predictions/"
+DILUTED_PREDICTIONS = TAPSFORMER_DATA+"diluted/predictions/"
+MODEL_TRAINING = TAPSFORMER_DATA+"training/"
+MODEL_VALIDATION = TAPSFORMER_DATA+"validation/"
+SAVED_MODELS = TAPSFORMER_WORKING_DIR+"src/tapsformer/models/saved/"
+
+RESULTS_DIR = TAPSFORMER_WORKING_DIR+"output/results/"
+RESULTS_TRAINING_DIR = RESULTS_DIR+"training/"
+FIGURES_DIR = TAPSFORMER_WORKING_DIR+"output/figures/"
