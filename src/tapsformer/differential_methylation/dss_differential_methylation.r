@@ -62,6 +62,15 @@ clusterEvalQ(cl, {
   library(bsseq)
 })
 
+options(warn = -1)
+suppressMessages(library(DSS))
+suppressMessages(library(data.table))
+suppressMessages(library(GenomicRanges))
+suppressMessages(library(bsseq))
+suppressMessages(library(org.Hs.eg.db))
+suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
+suppressMessages(library(AnnotationHub))
+
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
 log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_dmr_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", delta, p.threshold, fdr.threshold))
 
@@ -100,7 +109,7 @@ combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
 saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
 gc()
 
-perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge) {
+perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl) {
   output_dir <- file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d", 
                                             delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
@@ -234,16 +243,28 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   safe_plot(file.path(output_dir, "chromosome_coverage_plot.svg"), function() { print(p) })
 
   # Genomic Context Visualization
+  flog.info("Annotating DMRs with genomic context")
   dmr_gr <- GRanges(seqnames = dmr_dt$chr,
                     ranges = IRanges(start = dmr_dt$start, end = dmr_dt$end),
                     diff.Methy = dmr_dt$diff.Methy)
 
   # Get genomic features
   txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+  
+  # Filter out non-standard chromosomes
+  standard_chromosomes <- paste0("chr", c(1:22))
+  dmr_gr <- dmr_gr[seqnames(dmr_gr) %in% standard_chromosomes]
+  
   promoters <- promoters(txdb)
-  genes <- genes(txdb)
+  genes <- suppressWarnings(genes(txdb, single.strand.genes.only = TRUE))
   exons <- exons(txdb)
   introns <- gaps(exons)
+
+  # Ensure all genomic features are on standard chromosomes
+  promoters <- promoters[seqnames(promoters) %in% standard_chromosomes]
+  genes <- genes[seqnames(genes) %in% standard_chromosomes]
+  exons <- exons[seqnames(exons) %in% standard_chromosomes]
+  introns <- introns[seqnames(introns) %in% standard_chromosomes]
 
   # Annotate DMRs
   dmr_annotation <- data.frame(
@@ -257,6 +278,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   tryCatch({
     ah <- AnnotationHub()
     enhancers <- ah[["AH46978"]]  # GeneHancer enhancers for hg38
+    enhancers <- enhancers[seqnames(enhancers) %in% standard_chromosomes]
     dmr_annotation$Enhancer <- overlapsAny(dmr_gr, enhancers)
   }, error = function(e) {
     flog.warn("Failed to fetch enhancer data. Skipping enhancer annotation.")
@@ -295,7 +317,8 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir,
                                fdr.threshold = fdr.threshold,
                                min.CpG = min.CpG,
                                min.len = min.len,
-                               dis.merge = dis.merge)
+                               dis.merge = dis.merge,
+                               cl = cl)
 
 # Save the result
 saveRDS(result, file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d", 
@@ -306,3 +329,6 @@ stopCluster(cl)
 
 end_time <- Sys.time()
 flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
+
+# Restore warning level at the end of the script
+options(warn = 0)
