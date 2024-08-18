@@ -1,3 +1,6 @@
+# Rscript src/tapsformer/differential_methylation/dss_prepare_rastair_data.r --suffix raw
+# Rscript src/tapsformer/differential_methylation/dss_prepare_rastair_data.r --suffix raw_with_liver
+
 start_time <- Sys.time()
 
 install_and_load <- function(pkg) {
@@ -23,7 +26,7 @@ options(repos = c(CRAN = "https://cloud.r-project.org"))
 # Define packages
 bioc_packages <- c("DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
                    "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub")
-cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr")
+cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "optparse")
 
 # Install and load packages
 bioc_install_and_load(bioc_packages)
@@ -32,8 +35,24 @@ install_and_load(cran_packages)
 # Print loaded package versions
 sessionInfo()
 
-base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/raw"
+# Parse command line arguments
+option_list <- list(
+  make_option(c("-s", "--suffix"), type="character", default="raw",
+              help="Suffix for base directory [default= %default]", metavar="character")
+)
 
+opt_parser <- OptionParser(option_list=option_list)
+opt <- parse_args(opt_parser)
+
+# Construct base_dir with the provided suffix
+base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", opt$suffix)
+
+# Set up logging
+flog.appender(appender.file("/users/zetzioni/sharedscratch/logs/dss_prepare.log"))
+
+flog.info("Finished loading libraries for DSS analysis script")
+flog.info("Starting DSS analysis script")
+flog.info(paste("Using base directory:", base_dir))
 # Set up logging
 flog.appender(appender.file("/users/zetzioni/sharedscratch/logs/dss_prepare.log"))
 
