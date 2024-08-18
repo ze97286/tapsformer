@@ -1,3 +1,6 @@
+# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.3 0.01 0.01 4 50 50 raw
+# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.3 0.01 0.01 4 50 50 raw_with_liver
+
 args <- commandArgs(trailingOnly = TRUE)
 
 if (length(args) != 7) {
@@ -81,15 +84,21 @@ safe_plot <- function(filename, plot_func) {
 tumour_data <- readRDS(file.path(base_dir, "tumour_data.rds"))
 control_data <- readRDS(file.path(base_dir, "control_data.rds"))
 
-# Create BSseq objects (in parallel)
-create_bsseq <- function(data, sample_name) {
-  BSseq(chr = data$chr, pos = data$pos, M = as.matrix(data$X), Cov = as.matrix(data$N), sampleNames = sample_name)
-}
+# Create BSseq objects
+flog.info("Creating BSseq objects")
+tumour_bsseq <- BSseq(chr = tumour_data$chr, pos = tumour_data$pos, 
+                      M = as.matrix(tumour_data$X), Cov = as.matrix(tumour_data$N), 
+                      sampleNames = "tumour")
 
-bsseq_objects <- parLapply(cl, list(list(tumour_data, "tumour"), list(control_data, "Control")), 
-                           function(x) create_bsseq(x[[1]], x[[2]]))
+control_bsseq <- BSseq(chr = control_data$chr, pos = control_data$pos, 
+                       M = as.matrix(control_data$X), Cov = as.matrix(control_data$N), 
+                       sampleNames = "Control")
 
-combined_bsseq <- do.call(bsseq::combine, bsseq_objects)
+# Combine datasets
+flog.info("Combining datasets")
+combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
+saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
+gc()
 
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge) {
   output_dir <- file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d", 
