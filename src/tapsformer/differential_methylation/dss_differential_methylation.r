@@ -1,6 +1,6 @@
 args <- commandArgs(trailingOnly = TRUE)
 
-if (length(args) != 6) {
+if (length(args) != 7) {
   stop("Usage: Rscript dmr_analysis.R <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge>")
 }
 
@@ -10,6 +10,7 @@ fdr.threshold <- as.numeric(args[3])
 min.CpG <- as.numeric(args[4])
 min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
+suffix <- args[7]
 
 start_time <- Sys.time()
 
@@ -45,12 +46,25 @@ install_and_load(cran_packages)
 # Print loaded package versions
 sessionInfo()
 
-base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg"
+# Set up parallel processing
+library(parallel)
+num_cores <- detectCores() - 1  # Use all but one core
+cl <- makeCluster(num_cores)
+
+# Load required packages on all cores
+clusterEvalQ(cl, {
+  library(DSS)
+  library(data.table)
+  library(GenomicRanges)
+  library(bsseq)
+})
+
+base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
 log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_dmr_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", delta, p.threshold, fdr.threshold))
 
 # Set up logging
 flog.appender(appender.file(log_dir))
-flog.info("Starting DSS differential methylation analysis script")
+flog.info("Starting optimized DSS differential methylation analysis script")
 
 safe_plot <- function(filename, plot_func) {
   tryCatch({
@@ -64,129 +78,66 @@ safe_plot <- function(filename, plot_func) {
 }
 
 # Load the data
-tumour_rds_path <- file.path(base_dir, "tumour_data.rds")
-control_rds_path <- file.path(base_dir, "control_data.rds")
-tumour_data <- readRDS(tumour_rds_path)
-control_data <- readRDS(control_rds_path)
+tumour_data <- readRDS(file.path(base_dir, "tumour_data.rds"))
+control_data <- readRDS(file.path(base_dir, "control_data.rds"))
 
-if (nrow(tumour_data) == 0 || nrow(control_data) == 0) {
-  flog.error("No data available after preprocessing. Check your input files and filtering criteria.")
-  stop("No data available after preprocessing")
+# Create BSseq objects (in parallel)
+create_bsseq <- function(data, sample_name) {
+  BSseq(chr = data$chr, pos = data$pos, M = as.matrix(data$X), Cov = as.matrix(data$N), sampleNames = sample_name)
 }
 
-# Create BSseq objects
-flog.info("Creating BSseq objects")
-tryCatch({
-  tumour_bsseq <- BSseq(chr = tumour_data$chr,  
-                       pos = tumour_data$pos, 
-                       M = as.matrix(tumour_data$X), 
-                       Cov = as.matrix(tumour_data$N), 
-                       sampleNames = "tumour")
-  
-  control_bsseq <- BSseq(chr = control_data$chr, 
-                         pos = control_data$pos, 
-                         M = as.matrix(control_data$X), 
-                         Cov = as.matrix(control_data$N), 
-                         sampleNames = "Control")
-}, error = function(e) {
-  flog.error("Error in creating BSseq objects:")
-  flog.error(conditionMessage(e))
-  flog.error("tumour data structure:")
-  flog.error(capture.output(str(tumour_data)))
-  flog.error("Control data structure:")
-  flog.error(capture.output(str(control_data)))
-  stop("Error in creating BSseq objects")
-})
+bsseq_objects <- parLapply(cl, list(list(tumour_data, "tumour"), list(control_data, "Control")), 
+                           function(x) create_bsseq(x[[1]], x[[2]]))
 
-# Combine datasets
-flog.info("Combining datasets")
-combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
-saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
-gc()
+combined_bsseq <- do.call(bsseq::combine, bsseq_objects)
 
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge) {
-  # Define output directory based on parameters
   output_dir <- file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d", 
                                             delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   
   # Perform DML test
   flog.info("Performing DML test")
-  flog.info(sprintf("Starting analysis with delta = %.2f, p.threshold = %.4f", delta, p.threshold))
-
   dml_test <- DMLtest(combined_bsseq, group1 = c("tumour"), group2 = c("Control"), smoothing = TRUE)
 
-  # Call DMRs with new parameters
-  flog.info(paste("Calling DMRs with delta =", delta, ", p.threshold =", p.threshold, 
-                  ", min.CpG =", min.CpG, ", min.len =", min.len, ", dis.merge =", dis.merge))
+  # Call DMRs
+  flog.info("Calling DMRs")
   dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, 
                   minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
 
   # Convert DMRs to data.table
   dmr_dt <- as.data.table(dmrs)
 
-  # Log the columns in dmr_dt
-  flog.info(paste("Columns in dmr_dt after callDMR:", paste(names(dmr_dt), collapse = ", ")))
-
   # Extract p-values from DML test results for the CpGs in our DMRs
   dml_results <- as.data.table(dml_test)
   setkey(dml_results, chr, pos)
 
-  # Function to get minimum p-value for each DMR
-  get_min_pval <- function(chr, start, end) {
-    pvals <- dml_results[.(chr, start:end), on = .(chr, pos), nomatch = 0]$pval
+  # Function to get minimum p-value for each DMR (to be used in parallel)
+  get_min_pval <- function(dmr) {
+    pvals <- dml_results[.(dmr$chr, dmr$start:dmr$end), on = .(chr, pos), nomatch = 0]$pval
     if (length(pvals) == 0) return(NA)
     min(pvals, na.rm = TRUE)
   }
 
-  # Add minimum p-value for each DMR
-  dmr_dt[, pval := mapply(get_min_pval, chr, start, end)]
-
-  # Log the columns in dmr_dt again
-  flog.info(paste("Columns in dmr_dt after adding pval:", paste(names(dmr_dt), collapse = ", ")))
-
-  # Check if 'pval' column exists and log its summary
-  if ("pval" %in% names(dmr_dt)) {
-    flog.info(paste("Summary of pval column:", 
-                    paste(capture.output(summary(dmr_dt$pval)), collapse = "\n")))
-  } else {
-    flog.error("'pval' column not found in dmr_dt after attempting to add it")
-  }
+  # Add minimum p-value for each DMR (in parallel)
+  dmr_dt[, pval := parSapply(cl, split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)]
 
   # Calculate FDR
-  tryCatch({
-    dmr_dt[, fdr := p.adjust(pval, method = "BH")]
-    flog.info("FDR calculation successful")
-  }, error = function(e) {
-    flog.error(paste("Error in FDR calculation:", conditionMessage(e)))
-  })
-  
-  saveRDS(dmr_dt, file = file.path(output_dir, "dmr_results.rds"))
-  flog.info("DMR results saved")
-
-  # Save DML test results to disk
-  saveRDS(dml_test, file = file.path(output_dir, "dml_results.rds"))
-  flog.info("DML test results saved")
-
-  flog.info(paste("Columns in dmr_dt:", paste(names(dmr_dt), collapse = ", ")))
+  dmr_dt[, fdr := p.adjust(pval, method = "BH")]
 
   # Flag hypo-methylated regions in tumour and apply FDR threshold
   dmr_dt[, `:=`(
-    hypo_in_tumour = diff.Methy < 0,  # Lower methylation in tumor
+    hypo_in_tumour = diff.Methy < 0,
     significant_after_fdr = fdr < fdr.threshold
   )]
 
-  # Select top 100 hypomethylated DMRs after FDR correction
+  # Select top hypomethylated DMRs after FDR correction
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmrs, -areaStat)
   
-  # Log the number of significant hypomethylated DMRs
-  flog.info(paste("Number of significant hypomethylated DMRs:", nrow(top_hypo_dmrs)))
-
   # Write results to BED file
-  bed_file <- file.path(output_dir, "hypomethylated_dmrs.bed")
-  flog.info("Writing results to top 100 BED file")
-  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr)], bed_file, sep = "\t")
+  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr)], 
+         file.path(output_dir, "hypomethylated_dmrs.bed"), sep = "\t")
 
   # Visualizations
   flog.info("Creating visualizations")
@@ -336,12 +287,13 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir,
                                min.CpG = min.CpG,
                                min.len = min.len,
                                dis.merge = dis.merge)
-gc()
 
 # Save the result
 saveRDS(result, file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d", 
                                             delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge), "dmr_results.rds"))
-flog.info("Analysis completed successfully")
+
+# Stop the cluster
+stopCluster(cl)
 
 end_time <- Sys.time()
 flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
