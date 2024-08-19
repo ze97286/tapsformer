@@ -3,7 +3,18 @@ cf=/mnt/lustre/processed/Lu_lab/OAC_Immuno_Trial/TAPS_cfDNA/Results/1.6.1/Alignm
 admixed=/users/zetzioni/sharedscratch/tapsformer/data/admixtures/ 
 deliver=/mnt/lustre/users/bschuster/DeLIVER_cfDNA_TAPS/Results/1.0/Alignments/
 
-declare -a dmrs=("raw/delta_0.20_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50" 
+declare -a dmrs=("raw/delta_0.30_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50"
+                 "raw_with_liver/delta_0.30_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50"
+                #  "raw_with_liver/delta_0.25_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50"
+                #  "raw_with_liver/delta_0.20_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50"
+                #  "raw_with_liver/delta_0.20_p_0.0500_fdr_0.05_minCpG_4_minLen_50_disMerge_50"
+                #  "raw_with_liver/delta_0.30_p_0.0500_fdr_0.05_minCpG_4_minLen_50_disMerge_50"
+                #  "raw_with_liver/delta_0.25_p_0.0500_fdr_0.05_minCpG_4_minLen_50_disMerge_50"
+                #  "raw/delta_0.30_p_0.0500_fdr_0.05_minCpG_4_minLen_50_disMerge_50"
+                #  "raw/delta_0.25_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50" 
+                #  "raw/delta_0.20_p_0.0500_fdr_0.05_minCpG_4_minLen_50_disMerge_50"
+                #  "raw/delta_0.25_p_0.0500_fdr_0.05_minCpG_4_minLen_50_disMerge_50"
+                #  "raw/delta_0.20_p_0.0500_fdr_0.01_minCpG_4_minLen_50_disMerge_50"                 
                   )
 for dmr in "${dmrs[@]}"; do 
     for i in {1..22}; do
