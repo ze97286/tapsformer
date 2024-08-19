@@ -538,11 +538,6 @@ flog.info(sprintf("Mean methylation difference: %.4f", mean_diff))
 median_diff <- median(result$diff.Methy)
 flog.info(sprintf("Median methylation difference: %.4f", median_diff))
 
-# Print top 5 most significant DMRs
-flog.info("Top 5 most significant DMRs:")
-top_5 <- head(result[order(result$pval), ], 5)
-print(top_5[, .(chr, start, end, diff.Methy, pval, fdr, hypomethylation_strength)])
-
 end_time <- Sys.time()
 flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
 
