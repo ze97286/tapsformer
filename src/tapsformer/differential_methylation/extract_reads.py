@@ -28,11 +28,13 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
 
     seen_id = set()
     
-    for idx, r in df.iterrows():
+    idx = 1
+    for _, r in df.iterrows():
         start, end = r['start'], r['end']
         dmr_id = r['dmr_id']
         print(f"Processing DMR {idx}/{len(df)}: {start}-{end}, so far seen {len(reads)} reads")
-        
+        idx += 1
+
         if pileupcolumn is None:
             break  # End of file
         
@@ -67,7 +69,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                 if read.cigartuples[-1][0]==4:
                     skips_end=int(read.cigartuples[-1][1])
 
-                cpg_count = count_cpgs(reconstructed_ref, ref_prev_base, ref_following_base)
+                cpg_count = count_cpgs(reconstructed_ref, ref_following_base)
                 if cpg_count <=0:
                     continue
 

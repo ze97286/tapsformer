@@ -75,7 +75,7 @@ def align_read_to_reference(chr, read, genome_handle):
     return reconstructed_read, reconstructed_ref, ref_prev_base, ref_following_base
 
 
-def count_cpgs(ref,ref_prev_base, ref_following_base):
+def count_cpgs(ref, ref_following_base):
     '''
     Count the number of CpGs in the reference.
     '''
@@ -83,8 +83,6 @@ def count_cpgs(ref,ref_prev_base, ref_following_base):
     for iii in range(len(ref)-1):
         if ref[iii:iii+2]=="CG":
             cpg_count+=1
-    if ref[0]=="G" and ref_prev_base=="C":
-        cpg_count+=1  
     if ref[-1]=="C" and ref_following_base=="G":
         cpg_count+=1   
     return cpg_count          
