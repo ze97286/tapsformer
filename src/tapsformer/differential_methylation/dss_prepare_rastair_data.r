@@ -94,12 +94,13 @@ read_preprocess_bed <- function(file_path) {
     chr = chr[1],
     pos = ifelse(strand[1] == "+", end[1], start[1]),
     N = sum(unmod + mod),
-    X = sum(unmod)  # this is kind of backwards but it's inverting the counts for using DSS as intended. 
+    X = sum(mod)  # X represents methylated cytosines (mod in TAPS)
   ), by = .(cpg_id)]
+
   # Calculate beta and filter low coverage sites
   result <- result[N > 10]
   result[, `:=`(
-    beta = X / N,
+    beta = X / N,  # beta represents proportion of methylated cytosines
     cpg_id = NULL
   )]
   if (nrow(result) == 0) {

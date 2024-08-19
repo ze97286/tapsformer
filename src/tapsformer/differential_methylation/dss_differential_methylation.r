@@ -96,11 +96,13 @@ control_data <- readRDS(file.path(base_dir, "control_data.rds"))
 # Create BSseq objects
 flog.info("Creating BSseq objects")
 tumour_bsseq <- BSseq(chr = tumour_data$chr, pos = tumour_data$pos, 
-                      M = as.matrix(tumour_data$X), Cov = as.matrix(tumour_data$N), 
+                      M = as.matrix(tumour_data$X), # Methylated counts
+                      Cov = as.matrix(tumour_data$N), 
                       sampleNames = "tumour")
 
 control_bsseq <- BSseq(chr = control_data$chr, pos = control_data$pos, 
-                       M = as.matrix(control_data$X), Cov = as.matrix(control_data$N), 
+                       M = as.matrix(control_data$X), # Methylated counts
+                       Cov = as.matrix(control_data$N), 
                        sampleNames = "Control")
 
 # Combine datasets
@@ -210,6 +212,77 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)], 
          file.path(output_dir, "hypomethylated_dmrs.bed"), sep = "\t")
 
+
+  perform_dss_taps_diagnostics <- function(dmrs, dml_test, combined_bsseq, raw_tumour_data, raw_control_data, output_dir) {
+  flog.info("Performing DSS TAPS data diagnostics")
+  
+  # Convert to data.table for easier manipulation
+  dmr_dt <- as.data.table(dmrs)
+  
+  # Function to calculate beta from raw data
+  calculate_raw_beta <- function(data, chr, start, end) {
+    region_data <- data[chr == chr & pos >= start & pos <= end]
+    sum(region_data$X) / sum(region_data$N)
+  }
+  
+  # Sample a few DMRs for detailed checking
+  sample_size <- min(20, nrow(dmr_dt))
+  sample_dmrs <- dmr_dt[sample(.N, sample_size)]
+  
+  results <- lapply(1:nrow(sample_dmrs), function(i) {
+    dmr <- sample_dmrs[i]
+    raw_tumour_beta <- calculate_raw_beta(raw_tumour_data, dmr$chr, dmr$start, dmr$end)
+    raw_control_beta <- calculate_raw_beta(raw_control_data, dmr$chr, dmr$start, dmr$end)
+    raw_diff <- raw_control_beta - raw_tumour_beta
+    
+    list(
+      chr = dmr$chr,
+      start = dmr$start,
+      end = dmr$end,
+      dss_diff_methy = dmr$diff.Methy,
+      dss_area_stat = dmr$areaStat,
+      raw_tumour_beta = raw_tumour_beta,
+      raw_control_beta = raw_control_beta,
+      raw_diff = raw_diff
+    )
+  })
+  
+  results_dt <- rbindlist(results)
+  
+  # Log results
+  flog.info("Comparison of DSS results with raw data calculations:")
+  print(results_dt)
+  
+  # Check for inconsistencies
+  results_dt[, consistency := sign(dss_diff_methy) == -sign(raw_diff)]
+  inconsistent <- results_dt[consistency == FALSE]
+  
+  if (nrow(inconsistent) > 0) {
+    flog.warn("Found inconsistencies between DSS results and raw calculations:")
+    print(inconsistent)
+  } else {
+    flog.info("No inconsistencies found in sampled DMRs")
+  }
+  
+  # Plot comparison
+  safe_plot(
+    file.path(output_dir, "dss_vs_raw_comparison.svg"),
+    function() {
+      plot <- ggplot(results_dt, aes(x = raw_diff, y = dss_diff_methy)) +
+        geom_point() +
+        geom_abline(intercept = 0, slope = -1, color = "red", linetype = "dashed") +
+        labs(title = "DSS diff.Methy vs Raw Beta Difference",
+             x = "Raw Beta Difference (Control - Tumour)",
+             y = "DSS diff.Methy") +
+        theme_minimal()
+      print(plot)
+    }
+  )
+}
+
+perform_dss_taps_diagnostics(dmrs, dml_test, combined_bsseq, tumour_data, control_data, output_dir)
+
+
   # Visualizations
   flog.info("Creating visualizations")
 
@@ -221,8 +294,8 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       function() {
         plot <- ggplot(dmr_dt, aes(x = diff.Methy, y = -log10(pval))) +
                 geom_point(aes(color = hypo_in_tumour)) +
-                scale_color_manual(values = c("TRUE" = "red", "FALSE" = "blue"), 
-                                  labels = c("TRUE" = "Hypermethylated in Tumor", "FALSE" = "Hypomethylated in Tumor")) +
+                scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "red"), 
+                   labels = c("TRUE" = "Hypomethylated in Tumor", "FALSE" = "Hypermethylated in Tumor")) +
                 labs(title = "Volcano plot of DMRs",
                     x = "Methylation Difference (Positive = Hypomethylation in Tumor)",
                     y = "-log10(p-value)",
@@ -450,6 +523,27 @@ saveRDS(result, file.path(base_dir, sprintf("delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%
 
 # Stop the cluster
 stopCluster(cl)
+
+# Result Summary
+flog.info("Analysis Results Summary:")
+flog.info(sprintf("Total DMRs found: %d", nrow(result)))
+flog.info(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)))
+flog.info(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)))
+flog.info("Hypomethylation strength distribution:")
+flog.info(table(result$hypomethylation_strength))
+
+# Calculate mean methylation difference
+mean_diff <- mean(result$diff.Methy)
+flog.info(sprintf("Mean methylation difference: %.4f", mean_diff))
+
+# Calculate median methylation difference
+median_diff <- median(result$diff.Methy)
+flog.info(sprintf("Median methylation difference: %.4f", median_diff))
+
+# Print top 5 most significant DMRs
+flog.info("Top 5 most significant DMRs:")
+top_5 <- head(result[order(result$pval), ], 5)
+print(top_5[, .(chr, start, end, diff.Methy, pval, fdr, hypomethylation_strength)])
 
 end_time <- Sys.time()
 flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
