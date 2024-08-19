@@ -529,8 +529,6 @@ flog.info("Analysis Results Summary:")
 flog.info(sprintf("Total DMRs found: %d", nrow(result)))
 flog.info(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)))
 flog.info(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)))
-flog.info("Hypomethylation strength distribution:")
-flog.info(table(result$hypomethylation_strength))
 
 # Calculate mean methylation difference
 mean_diff <- mean(result$diff.Methy)
