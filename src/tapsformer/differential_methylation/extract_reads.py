@@ -28,10 +28,10 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
 
     seen_id = set()
     
-    for _, r in df.iterrows():
+    for idx, r in df.iterrows():
         start, end = r['start'], r['end']
         dmr_id = r['dmr_id']
-        print(f"Processing DMR {start}-{end}, so far seen {len(reads)} reads")
+        print(f"Processing DMR {idx}/{len(df)}: {start}-{end}, so far seen {len(reads)} reads")
         
         if pileupcolumn is None:
             break  # End of file
@@ -77,6 +77,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                 reconstructed_read = reconstructed_read[skips_start:len(reconstructed_read)-skips_end]
                 alignment_scores.append(read.get_tag("AS"))
                 dmr_ids.append(dmr_id)
+                mstates.append(mstatus)
                 mods.append(mstatus.count(1))
                 unmods.append(mstatus.count(0))
                 mapqs.append(read.mapping_quality)
@@ -105,7 +106,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
         "reference": refs, 
         "mod": mods,
         "unmod": unmods, 
-        "informative_cpg": starts, 
+        "reference_start": starts, 
         "ref_prev_base": prevs,
         "ref_following_base": followings,
         "region_start": region_starts, 
