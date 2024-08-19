@@ -63,9 +63,9 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                 skips_start = 0
                 skips_end = 0
                 if read.cigartuples[0][0]==4:
-                    skips_start=read.cigartuples[0][1]
+                    skips_start=int(read.cigartuples[0][1])
                 if read.cigartuples[-1][0]==4:
-                    skips_end=read.cigartuples[-1][1]
+                    skips_end=int(read.cigartuples[-1][1])
 
                 cpg_count = count_cpgs(reconstructed_ref, ref_prev_base, ref_following_base)
                 if cpg_count <=0:
