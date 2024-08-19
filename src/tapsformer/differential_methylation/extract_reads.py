@@ -72,6 +72,11 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                     continue
 
                 mstatus = methylation_status(reconstructed_read, reconstructed_ref, read.flag, ref_following_base)
+                
+                print("skips_start",skips_start)
+                print("skips_end",skips_end)
+                print("len(reconstructed_ref)-skips_end",len(reconstructed_ref)-skips_end)
+                
                 reconstructed_ref = reconstructed_ref[skips_start,len(reconstructed_ref)-skips_end]
                 mstatus=mstatus[skips_start,len(mstatus)-skips_end]
                 reconstructed_read = reconstructed_read[skips_start,len(reconstructed_read)-skips_end]
