@@ -325,14 +325,8 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
     for (i in 1:nrow(strongest_dmrs)) {
       dmr <- strongest_dmrs[i, ]
+
       flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end))
-
-      # Check if the region exists in both BSseq objects
-      tumour_region <- subsetByOverlaps(tumour_bsseq, GRanges(dmr$chr, IRanges(dmr$start, dmr$end)))
-      control_region <- subsetByOverlaps(control_bsseq, GRanges(dmr$chr, IRanges(dmr$start, dmr$end)))
-
-      flog.info(sprintf("Tumour data points in region: %d", length(tumour_region)))
-      flog.info(sprintf("Control data points in region: %d", length(control_region)))
 
       filename <- file.path(dmr_plot_dir, sprintf(
         "DMR_%d_chr%s_%d-%d.svg",
@@ -342,45 +336,49 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       safe_plot(filename, function() {
         tryCatch(
           {
-            layout(matrix(c(1, 2), nrow = 2, ncol = 1))
+            par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
 
             # Plot tumour
-            par(mar = c(4, 4, 3, 2))
-            plotRegion(tumour_bsseq,
-              region = GRanges(dmr$chr, IRanges(dmr$start, dmr$end)),
-              extend = ext, main = "Tumour"
-            )
+            showOneDMR(dmr, tumour_bsseq, ext = ext)
             title(
               main = sprintf(
-                "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                "Tumour - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
                 i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
               ),
               cex.main = 0.9
             )
 
             # Plot control
-            par(mar = c(4, 4, 2, 2))
-            plotRegion(control_bsseq,
-              region = GRanges(dmr$chr, IRanges(dmr$start, dmr$end)),
-              extend = ext, main = "Control"
-            )
+            showOneDMR(dmr, control_bsseq, ext = ext)
+            title(main = "Control", cex.main = 0.9)
           },
           error = function(e) {
-            plot(1, type = "n", xlab = "", ylab = "", main = "Error in plotting")
-            text(1, 1, labels = paste("Error:", conditionMessage(e)), cex = 0.8, col = "red")
             flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
+            # Create a simple error plot
+            plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
+            text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
           }
         )
       })
-
       flog.info(sprintf("Processed DMR %d", i))
     }
 
     flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
   }
 
-  # Call the function with separate BSseq objects
+  # Check BSseq object structure
+  flog.info(sprintf(
+    "Tumour BSseq object: %d samples, %d features",
+    ncol(tumour_bsseq), nrow(tumour_bsseq)
+  ))
+  flog.info(sprintf(
+    "Control BSseq object: %d samples, %d features",
+    ncol(control_bsseq), nrow(control_bsseq)
+  ))
+
+  # Then call the function
   plot_top_DMRs(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50)
+
   # 1. Volcano plot
   if ("pval" %in% names(dmr_dt)) {
     flog.info("Creating volcano plot")
