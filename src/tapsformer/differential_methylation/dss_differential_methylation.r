@@ -214,73 +214,73 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
 
   perform_dss_taps_diagnostics <- function(dmrs, dml_test, combined_bsseq, raw_tumour_data, raw_control_data, output_dir) {
-  flog.info("Performing DSS TAPS data diagnostics")
-  
-  # Convert to data.table for easier manipulation
-  dmr_dt <- as.data.table(dmrs)
-  
-  # Function to calculate beta from raw data
-  calculate_raw_beta <- function(data, chr, start, end) {
-    region_data <- data[chr == chr & pos >= start & pos <= end]
-    sum(region_data$X) / sum(region_data$N)
-  }
-  
-  # Sample a few DMRs for detailed checking
-  sample_size <- min(20, nrow(dmr_dt))
-  sample_dmrs <- dmr_dt[sample(.N, sample_size)]
-  
-  results <- lapply(1:nrow(sample_dmrs), function(i) {
-    dmr <- sample_dmrs[i]
-    raw_tumour_beta <- calculate_raw_beta(raw_tumour_data, dmr$chr, dmr$start, dmr$end)
-    raw_control_beta <- calculate_raw_beta(raw_control_data, dmr$chr, dmr$start, dmr$end)
-    raw_diff <- raw_control_beta - raw_tumour_beta
+    flog.info("Performing DSS TAPS data diagnostics")
     
-    list(
-      chr = dmr$chr,
-      start = dmr$start,
-      end = dmr$end,
-      dss_diff_methy = dmr$diff.Methy,
-      dss_area_stat = dmr$areaStat,
-      raw_tumour_beta = raw_tumour_beta,
-      raw_control_beta = raw_control_beta,
-      raw_diff = raw_diff
-    )
-  })
-  
-  results_dt <- rbindlist(results)
-  
-  # Log results
-  flog.info("Comparison of DSS results with raw data calculations:")
-  print(results_dt)
-  
-  # Check for inconsistencies
-  results_dt[, consistency := sign(dss_diff_methy) == -sign(raw_diff)]
-  inconsistent <- results_dt[consistency == FALSE]
-  
-  if (nrow(inconsistent) > 0) {
-    flog.warn("Found inconsistencies between DSS results and raw calculations:")
-    print(inconsistent)
-  } else {
-    flog.info("No inconsistencies found in sampled DMRs")
-  }
-  
-  # Plot comparison
-  safe_plot(
-    file.path(output_dir, "dss_vs_raw_comparison.svg"),
-    function() {
-      plot <- ggplot(results_dt, aes(x = raw_diff, y = dss_diff_methy)) +
-        geom_point() +
-        geom_abline(intercept = 0, slope = -1, color = "red", linetype = "dashed") +
-        labs(title = "DSS diff.Methy vs Raw Beta Difference",
-             x = "Raw Beta Difference (Control - Tumour)",
-             y = "DSS diff.Methy") +
-        theme_minimal()
-      print(plot)
+    # Convert to data.table for easier manipulation
+    dmr_dt <- as.data.table(dmrs)
+    
+    # Function to calculate beta from raw data
+    calculate_raw_beta <- function(data, chr, start, end) {
+      region_data <- data[chr == chr & pos >= start & pos <= end]
+      sum(region_data$X) / sum(region_data$N)
     }
-  )
-}
+    
+    # Sample a few DMRs for detailed checking
+    sample_size <- min(20, nrow(dmr_dt))
+    sample_dmrs <- dmr_dt[sample(.N, sample_size)]
+    
+    results <- lapply(1:nrow(sample_dmrs), function(i) {
+      dmr <- sample_dmrs[i]
+      raw_tumour_beta <- calculate_raw_beta(raw_tumour_data, dmr$chr, dmr$start, dmr$end)
+      raw_control_beta <- calculate_raw_beta(raw_control_data, dmr$chr, dmr$start, dmr$end)
+      raw_diff <- raw_control_beta - raw_tumour_beta
+      
+      list(
+        chr = dmr$chr,
+        start = dmr$start,
+        end = dmr$end,
+        dss_diff_methy = dmr$diff.Methy,
+        dss_area_stat = dmr$areaStat,
+        raw_tumour_beta = raw_tumour_beta,
+        raw_control_beta = raw_control_beta,
+        raw_diff = raw_diff
+      )
+    })
+    
+    results_dt <- rbindlist(results)
+    
+    # Log results
+    flog.info("Comparison of DSS results with raw data calculations:")
+    print(results_dt)
+    
+    # Check for inconsistencies
+    results_dt[, consistency := sign(dss_diff_methy) == -sign(raw_diff)]
+    inconsistent <- results_dt[consistency == FALSE]
+    
+    if (nrow(inconsistent) > 0) {
+      flog.warn("Found inconsistencies between DSS results and raw calculations:")
+      print(inconsistent)
+    } else {
+      flog.info("No inconsistencies found in sampled DMRs")
+    }
+    
+    # Plot comparison
+    safe_plot(
+      file.path(output_dir, "dss_vs_raw_comparison.svg"),
+      function() {
+        plot <- ggplot(results_dt, aes(x = raw_diff, y = dss_diff_methy)) +
+          geom_point() +
+          geom_abline(intercept = 0, slope = -1, color = "red", linetype = "dashed") +
+          labs(title = "DSS diff.Methy vs Raw Beta Difference",
+              x = "Raw Beta Difference (Control - Tumour)",
+              y = "DSS diff.Methy") +
+          theme_minimal()
+        print(plot)
+      }
+    )
+  }
 
-perform_dss_taps_diagnostics(dmrs, dml_test, combined_bsseq, tumour_data, control_data, output_dir)
+  perform_dss_taps_diagnostics(top_hypo_dmrs, dml_test, combined_bsseq, tumour_data, control_data, output_dir)
 
 
   # Visualizations
@@ -293,14 +293,14 @@ perform_dss_taps_diagnostics(dmrs, dml_test, combined_bsseq, tumour_data, contro
       file.path(output_dir, "volcano_plot.svg"),
       function() {
         plot <- ggplot(dmr_dt, aes(x = diff.Methy, y = -log10(pval))) +
-                geom_point(aes(color = hypo_in_tumour)) +
-                scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "red"), 
-                   labels = c("TRUE" = "Hypomethylated in Tumor", "FALSE" = "Hypermethylated in Tumor")) +
-                labs(title = "Volcano plot of DMRs",
-                    x = "Methylation Difference (Positive = Hypomethylation in Tumor)",
-                    y = "-log10(p-value)",
-                    color = "Methylation State") +
-                theme_minimal()
+          geom_point(aes(color = hypo_in_tumour)) +
+          scale_color_manual(values = c("TRUE" = "blue", "FALSE" = "red"), 
+            labels = c("TRUE" = "Hypomethylated in Tumor", "FALSE" = "Hypermethylated in Tumor")) +
+          labs(title = "Volcano plot of DMRs",
+            x = "Methylation Difference (Negative = Hypomethylation in Tumor)",
+            y = "-log10(p-value)",
+            color = "Methylation State") +
+          theme_minimal()
         print(plot)
       }
     )
@@ -356,18 +356,21 @@ perform_dss_taps_diagnostics(dmrs, dml_test, combined_bsseq, tumour_data, contro
   dmr_dt$cumpos <- dmr_dt$start + chr_sizes$cumpos[match(dmr_dt$chr, chr_sizes$chr)] - chr_sizes$size[match(dmr_dt$chr, chr_sizes$chr)]
 
   # Create the chromosome coverage plot
-  p <- ggplot(dmr_dt, aes(x = cumpos, y = diff.Methy, color = diff.Methy > 0)) +
+  p <- ggplot(dmr_dt, aes(x = cumpos, y = diff.Methy, color = diff.Methy < 0)) +
     geom_point(alpha = 0.5) +
-    scale_color_manual(values = c("blue", "red"), name = "Hypomethylated") +
+    scale_color_manual(values = c("FALSE" = "red", "TRUE" = "blue"), 
+      name = "Methylation State",
+      labels = c("FALSE" = "Hypermethylated", "TRUE" = "Hypomethylated")) +
     scale_x_continuous(label = chr_sizes$chr, breaks = chr_sizes$pos) +
-    labs(title = "DMRs across chromosomes",
+    labs(title = paste("DMRs across chromosomes\n",
+                       "Hypomethylated:", sum(dmr_dt$diff.Methy < 0),
+                       "Hypermethylated:", sum(dmr_dt$diff.Methy >= 0)),
       x = "Chromosome", 
-      y = "Methylation Difference (Positive = Hypomethylation in Tumor)") +
+      y = "Methylation Difference (Negative = Hypomethylation in Tumor)") +
     theme_minimal() +
     theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
   safe_plot(file.path(output_dir, "chromosome_coverage_plot.svg"), function() { print(p) })
-
 
     # Manhattan Plot
   create_manhattan_plot <- function(dmr_dt, output_dir) {
@@ -413,24 +416,46 @@ perform_dss_taps_diagnostics(dmrs, dml_test, combined_bsseq, tumour_data, contro
   }
 
   # Heatmap of Top DMRs
-  create_top_dmr_heatmap <- function(combined_bsseq, dmr_dt, output_dir, top_n = 50) {
+  create_top_dmr_heatmap <- function(combined_bsseq, dmr_dt, output_dir, top_n = 100) {
     flog.info("Creating heatmap of top DMRs")
     safe_plot(
-      file.path(output_dir, "top_dmr_heatmap.svg"),
+      file.path(output_dir, "top_dmr_heatmap.png"),  # Changed to PNG for testing
       function() {
+        # Check if dmr_dt is not empty
+        if (nrow(dmr_dt) == 0) {
+          flog.error("dmr_dt is empty. Cannot create heatmap.")
+          return(NULL)
+        }
+        
         top_dmrs <- head(dmr_dt[order(-abs(areaStat))], n = top_n)
+        
+        # Check if top_dmrs is not empty
+        if (nrow(top_dmrs) == 0) {
+          flog.error("No top DMRs selected. Cannot create heatmap.")
+          return(NULL)
+        }
+        
         dmr_ranges <- GRanges(seqnames = top_dmrs$chr, 
                               ranges = IRanges(start = top_dmrs$start, end = top_dmrs$end))
         
         meth_mat <- getMeth(combined_bsseq, regions = dmr_ranges, type = "smooth", what = "perRegion")
         
+        # Check if meth_mat is not empty
+        if (is.null(meth_mat) || all(is.na(meth_mat))) {
+          flog.error("Methylation matrix is empty or all NA. Cannot create heatmap.")
+          return(NULL)
+        }
+        
+        # Print dimensions of meth_mat for debugging
+        flog.info(sprintf("Methylation matrix dimensions: %d rows, %d columns", nrow(meth_mat), ncol(meth_mat)))
+        
         pheatmap(meth_mat,
-                scale = "none",
-                cluster_rows = TRUE,
-                cluster_cols = TRUE,
-                show_rownames = FALSE,
-                main = paste("Methylation Levels of Top", top_n, "DMRs"),
-                filename = file.path(output_dir, "top_dmr_heatmap.svg"))
+                 scale = "none",
+                 cluster_rows = TRUE,
+                 cluster_cols = TRUE,
+                 show_rownames = FALSE,
+                 main = paste("Methylation Levels of Top", top_n, "DMRs"),
+                 filename = file.path(output_dir, "top_dmr_heatmap.png"))  # Changed to PNG
       }
     )
   }
