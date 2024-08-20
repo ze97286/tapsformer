@@ -286,34 +286,36 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Visualizations
   flog.info("Creating visualizations")
 
-  plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50) {
-    # Ensure output directory exists
+  plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 500) {
     dmr_plot_dir <- file.path(output_dir, "top_dmr_plots")
     dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
     
-    # Get top n DMRs
     top_n_dmrs <- head(top_hypo_dmrs, n)
     
     for (i in 1:nrow(top_n_dmrs)) {
       dmr <- top_n_dmrs[i,]
       
-      # Create a unique filename for each DMR
-      filename <- file.path(dmr_plot_dir, sprintf("DMR_%d_chr%s_%d-%d.svg", 
+      filename <- file.path(dmr_plot_dir, sprintf("DMR_%d_%s_%d-%d.svg", 
                                                   i, dmr$chr, dmr$start, dmr$end))
       
-      # Use safe_plot to save the DMR plot
       safe_plot(filename, function() {
-        showOneDMR(dmr, combined_bsseq, 
-                  main = sprintf("DMR %d: %s:%d-%d (Strength: %s)", 
-                                  i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength))
+        # Set up the plot area with a title
+        plot.new()
+        plot.window(xlim = c(dmr$start - ext, dmr$end + ext), ylim = c(0, 1))
+        title(main = sprintf("DMR %d: %s:%d-%d (Strength: %s)", 
+                            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength))
+        
+        # Call showOneDMR
+        showOneDMR(dmr, combined_bsseq, ext = ext)
       })
+      
       flog.info(sprintf("Saved plot for DMR %d to %s", i, filename))
     }
+    
     flog.info(sprintf("Completed plotting top %d DMRs", n))
   }
-
-  # Call the function after you've created top_hypo_dmrs
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
+
   # 1. Volcano plot
   if ("pval" %in% names(dmr_dt)) {
     flog.info("Creating volcano plot")
