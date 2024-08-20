@@ -314,10 +314,62 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   perform_dss_taps_diagnostics(top_hypo_dmrs, dml_test, combined_bsseq, tumour_data, control_data, output_dir)
 
 
+  myShowOneDMR <- function(OneDMR, BSobj, ext = 500, ylim = c(0, 1)) {
+    allchr = as.character(seqnames(BSobj))
+    allpos = start(BSobj)
+    X = getBSseq(BSobj, "M")
+    N = getBSseq(BSobj, "Cov")
+    
+    chr = as.character(OneDMR$chr)
+    ix.chr = which(allchr == chr)
+    
+    thispos = allpos[ix.chr]
+    thisN = N[ix.chr, ]
+    thisX = X[ix.chr, ]
+    
+    xlim = c(OneDMR$start - ext, OneDMR$end + ext)
+    ix1 = which(thispos <= xlim[2] & thispos >= xlim[1])
+    
+    if (length(ix1) == 0) {
+        stop("No positions found in the specified range.")
+    }
+    
+    nSample = ncol(X)
+    y.cex = ifelse(nSample > 2, 0.66, 1)
+    sNames = sampleNames(BSobj)
+    
+    par(mfrow = c(nSample, 1), mar = c(2.5, 2.5, 1.6, 2.5), mgp = c(1.5, 0.5, 0))
+    thisP = thisX / thisN
+    
+    for (i in 1:ncol(X)) {
+        if (nrow(thisP[ix1, , drop = FALSE]) == 0) {
+            stop("No methylation data available for the specified range.")
+        }
+        
+        plot(thispos[ix1], thisP[ix1, i], type = "h", col = "blue", axes = F, lwd = 1.5,
+             xlab = '', ylab = '', ylim = ylim, xlim = xlim,
+             main = sNames[i])
+        box(col = "black")
+        axis(1,)
+        axis(2, col = "blue", col.axis = "blue")
+        mtext(chr, side = 1, line = 1.33, cex = y.cex)
+        mtext("methyl%", side = 2, line = 1.33, col = "blue", cex = y.cex)
+        
+        thisN.norm = thisN[ix1, i] / max(thisN[ix1, ]) * ylim[2]
+        lines(thispos[ix1], thisN.norm, type = "l", col = "gray", lwd = 1.5)
+        axis(side = 4, at = seq(0, ylim[2], length.out = 5),
+             labels = round(seq(0, max(thisN[ix1, ]), length.out = 5)) )
+        mtext("read depth", side = 4, line = 1.33, cex = y.cex)
+        
+        rect(OneDMR$start, ylim[1], OneDMR$end, ylim[2], col = "#FF00001A", border = NA)
+    }
+}
+
+
   # Visualizations
   flog.info("Creating visualizations")
 
-  plot_top_DMRs <- function(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50, ext = 500) {
+  plot_top_DMRs <- function(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50, ext = 50) {
     dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
     dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -339,7 +391,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
 
             # Plot tumour
-            showOneDMR(dmr, tumour_bsseq, ext = ext)
+            myShowOneDMR(dmr, tumour_bsseq, ext = ext)
             title(
               main = sprintf(
                 "Tumour - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
@@ -349,7 +401,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             )
 
             # Plot control
-            showOneDMR(dmr, control_bsseq, ext = ext)
+            myShowOneDMR(dmr, control_bsseq, ext = ext)
             title(main = "Control", cex.main = 0.9)
           },
           error = function(e) {
