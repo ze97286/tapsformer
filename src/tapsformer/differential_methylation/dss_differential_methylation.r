@@ -92,6 +92,7 @@ safe_plot <- function(filename, plot_func) {
       flog.info(paste("Plot saved as", filename))
     },
     error = function(e) {
+      if (dev.cur() > 1) dev.off() # Close device if open
       flog.error(paste("Error creating plot:", filename, "-", conditionMessage(e)))
     }
   )
@@ -317,11 +318,13 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   flog.info("Creating visualizations")
 
   plot_top_DMRs <- function(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50, ext = 500) {
+    # Close any open graphics devices
+    while (dev.cur() > 1) dev.off()
+
     dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
     dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
 
-    # Get the n DMRs with the strongest hypomethylation (most negative areaStat)
-    strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat)], n)
+    strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
 
     for (i in 1:nrow(strongest_dmrs)) {
       dmr <- strongest_dmrs[i, ]
@@ -332,7 +335,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       ))
 
       safe_plot(filename, function() {
-        par(mfrow = c(2, 1), mar = c(4, 4, 3, 2)) # Adjust margins for better title fit
+        par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
 
         # Plot tumour
         showOneDMR(dmr, tumour_bsseq, ext = ext)
@@ -342,19 +345,20 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
           ),
           cex.main = 0.9
-        ) # Reduce title font size if needed
+        )
 
         # Plot control
         showOneDMR(dmr, control_bsseq, ext = ext)
         title(main = "Control", cex.main = 0.9)
       })
 
-      flog.info(sprintf("Saved plot for strongly hypomethylated DMR %d to %s", i, filename))
+      flog.info(sprintf("Processed DMR %d", i))
     }
 
     flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
   }
-  plot_top_DMRs(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 100)
+  # Call the function with separate BSseq objects
+  plot_top_DMRs(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50)
   # 1. Volcano plot
   if ("pval" %in% names(dmr_dt)) {
     flog.info("Creating volcano plot")
