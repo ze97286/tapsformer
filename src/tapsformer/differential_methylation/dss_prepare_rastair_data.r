@@ -97,8 +97,7 @@ read_preprocess_bed <- function(file_path) {
     X = sum(mod)  # X represents methylated cytosines (mod in TAPS)
   ), by = .(cpg_id)]
 
-  # Calculate beta and filter low coverage sites
-  result <- result[N > 10]
+  # Calculate beta 
   result[, `:=`(
     beta = X / N,  # beta represents proportion of methylated cytosines
     cpg_id = NULL
