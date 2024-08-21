@@ -153,6 +153,18 @@ read_preprocess_bed_wrapper <- function(file_path) {
 clusterExport(cl, c("read_preprocess_bed_wrapper", "read_preprocess_bed"))
 
 # Process tumour files in parallel
+save_sample_data <- function(data_list, base_dir, prefix) {
+  for (i in seq_along(data_list)) {
+    sample_data <- data_list[[i]]
+    if (!is.null(sample_data)) {
+      sample_rds_path <- file.path(base_dir, paste0(prefix, "_sample_", i, ".rds"))
+      saveRDS(sample_data, sample_rds_path)
+      flog.info(paste("Sample", i, "data saved to:", sample_rds_path))
+    }
+  }
+}
+
+# Process tumour files in parallel
 flog.info("Processing tumour files in parallel")
 tumour_data_list <- parLapply(cl, tumour_files, read_preprocess_bed_wrapper)
 
@@ -167,28 +179,12 @@ stopCluster(cl)
 tumour_data_list <- tumour_data_list[!sapply(tumour_data_list, is.null)]
 control_data_list <- control_data_list[!sapply(control_data_list, is.null)]
 
-# Combine the results
-tumour_data <- rbindlist(tumour_data_list)
-control_data <- rbindlist(control_data_list)
+# Save the data as separate RDS files for each sample
+flog.info("Saving individual tumour samples to RDS")
+save_sample_data(tumour_data_list, base_dir, "tumour")
 
-# Sort the data by chromosome and position
-setorder(tumour_data, chr, pos)
-setorder(control_data, chr, pos)
-
-gc()
-
-# Define file paths to save the RDS files
-tumour_rds_path <- file.path(base_dir, "tumour_data.rds")
-control_rds_path <- file.path(base_dir, "control_data.rds")
-
-# Save the data as RDS files
-flog.info("Saving tumour data to RDS")
-saveRDS(tumour_data, tumour_rds_path)
-flog.info(paste("tumour data saved to:", tumour_rds_path))
-
-flog.info("Saving control data to RDS")
-saveRDS(control_data, control_rds_path)
-flog.info(paste("Control data saved to:", control_rds_path))
+flog.info("Saving individual control samples to RDS")
+save_sample_data(control_data_list, base_dir, "control")
 
 flog.info("Preparation script completed successfully")
 

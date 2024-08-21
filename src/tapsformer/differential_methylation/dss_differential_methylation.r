@@ -98,29 +98,35 @@ safe_plot <- function(filename, plot_func) {
   )
 }
 
+load_and_create_bsseq <- function(base_dir, prefix) {
+  sample_files <- list.files(path = base_dir, pattern = paste0(prefix, "_sample_.*\\.rds$"), full.names = TRUE)
+  sample_list <- lapply(sample_files, readRDS)
+  
+  # Create the BSseq objects for all samples
+  bsseq_list <- lapply(seq_along(sample_list), function(i) {
+    sample_data <- sample_list[[i]]
+    BSseq(
+      chr = sample_data$chr, 
+      pos = sample_data$pos,
+      M = as.matrix(sample_data$X), 
+      Cov = as.matrix(sample_data$N),
+      sampleNames = paste0(prefix, "_", i)
+    )
+  })
+  
+  # Combine all BSseq objects into one
+  combined_bsseq <- do.call(bsseq::combine, bsseq_list)
+  return(combined_bsseq)
+}
+
+
 # Load the data
-tumour_data <- readRDS(file.path(base_dir, "tumour_data.rds"))
-control_data <- readRDS(file.path(base_dir, "control_data.rds"))
+tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
+control_bsseq <- load_and_create_bsseq(base_dir, "control")
 
-# Create BSseq objects
-flog.info("Creating BSseq objects")
-tumour_bsseq <- BSseq(
-  chr = tumour_data$chr, pos = tumour_data$pos,
-  M = as.matrix(tumour_data$X), # Methylated counts
-  Cov = as.matrix(tumour_data$N),
-  sampleNames = "tumour"
-)
-
-control_bsseq <- BSseq(
-  chr = control_data$chr, pos = control_data$pos,
-  M = as.matrix(control_data$X), # Methylated counts
-  Cov = as.matrix(control_data$N),
-  sampleNames = "Control"
-)
-
-# Combine datasets
-flog.info("Combining datasets")
+# Combine tumour and control BSseq objects
 combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
+
 saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
 gc()
 
@@ -313,59 +319,6 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   perform_dss_taps_diagnostics(top_hypo_dmrs, dml_test, combined_bsseq, tumour_data, control_data, output_dir)
 
-
-  myShowOneDMR <- function(OneDMR, BSobj, ext = 500, ylim = c(0, 1)) {
-    allchr = as.character(seqnames(BSobj))
-    allpos = start(BSobj)
-    X = getBSseq(BSobj, "M")
-    N = getBSseq(BSobj, "Cov")
-    
-    chr = as.character(OneDMR$chr)
-    ix.chr = which(allchr == chr)
-    
-    thispos = allpos[ix.chr]
-    thisN = N[ix.chr, ]
-    thisX = X[ix.chr, ]
-    
-    xlim = c(OneDMR$start - ext, OneDMR$end + ext)
-    ix1 = which(thispos <= xlim[2] & thispos >= xlim[1])
-    
-    if (length(ix1) == 0) {
-        stop("No positions found in the specified range.")
-    }
-    
-    nSample = ncol(X)
-    y.cex = ifelse(nSample > 2, 0.66, 1)
-    sNames = sampleNames(BSobj)
-    
-    par(mfrow = c(nSample, 1), mar = c(2.5, 2.5, 1.6, 2.5), mgp = c(1.5, 0.5, 0))
-    thisP = thisX / thisN
-    
-    for (i in 1:ncol(X)) {
-        if (nrow(thisP[ix1, , drop = FALSE]) == 0) {
-            stop("No methylation data available for the specified range.")
-        }
-        
-        plot(thispos[ix1], thisP[ix1, i], type = "h", col = "blue", axes = F, lwd = 1.5,
-             xlab = '', ylab = '', ylim = ylim, xlim = xlim,
-             main = sNames[i])
-        box(col = "black")
-        axis(1,)
-        axis(2, col = "blue", col.axis = "blue")
-        mtext(chr, side = 1, line = 1.33, cex = y.cex)
-        mtext("methyl%", side = 2, line = 1.33, col = "blue", cex = y.cex)
-        
-        thisN.norm = thisN[ix1, i] / max(thisN[ix1, ]) * ylim[2]
-        lines(thispos[ix1], thisN.norm, type = "l", col = "gray", lwd = 1.5)
-        axis(side = 4, at = seq(0, ylim[2], length.out = 5),
-             labels = round(seq(0, max(thisN[ix1, ]), length.out = 5)) )
-        mtext("read depth", side = 4, line = 1.33, cex = y.cex)
-        
-        rect(OneDMR$start, ylim[1], OneDMR$end, ylim[2], col = "#FF00001A", border = NA)
-    }
-}
-
-
   # Visualizations
   flog.info("Creating visualizations")
 
@@ -391,7 +344,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
 
             # Plot tumour
-            myShowOneDMR(dmr, tumour_bsseq, ext = ext)
+            showOneDMR(dmr, tumour_bsseq, ext = ext)
             title(
               main = sprintf(
                 "Tumour - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
@@ -401,7 +354,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             )
 
             # Plot control
-            myShowOneDMR(dmr, control_bsseq, ext = ext)
+            showOneDMR(dmr, control_bsseq, ext = ext)
             title(main = "Control", cex.main = 0.9)
           },
           error = function(e) {
