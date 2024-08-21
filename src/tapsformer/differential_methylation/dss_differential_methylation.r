@@ -263,8 +263,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     n_samples <- ncol(tumour_bsseq) + ncol(control_bsseq)
 
     # Get the sample names from the BSseq objects
-    tumour_sample_names <- sampleNames(tumour_bsseq)
-    control_sample_names <- sampleNames(control_bsseq)
+    sample_names <- c(sampleNames(tumour_bsseq), sampleNames(control_bsseq))
 
     for (i in 1:nrow(strongest_dmrs)) {
       dmr <- strongest_dmrs[i, ]
@@ -281,26 +280,13 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
           {
             par(mfrow = c(n_samples, 1), mar = c(3, 3, 2, 1))
 
-            # Plot tumour samples
-            for (j in 1:length(tumour_sample_names)) {
-              showOneDMR(dmr, tumour_bsseq[, j], ext = ext)
+            # Plot all samples in the BSseq object
+            for (j in 1:length(sample_names)) {
+              showOneDMR(dmr, bsseq = bsseq::subsetBySample(tumour_bsseq, sample_names[j]), ext = ext)
               title(
                 main = sprintf(
                   "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                  tumour_sample_names[j], i, dmr$chr, dmr$start, dmr$end,
-                  dmr$hypomethylation_strength, dmr$areaStat
-                ),
-                cex.main = 0.9
-              )
-            }
-
-            # Plot control samples
-            for (j in 1:length(control_sample_names)) {
-              showOneDMR(dmr, control_bsseq[, j], ext = ext)
-              title(
-                main = sprintf(
-                  "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                  control_sample_names[j], i, dmr$chr, dmr$start, dmr$end,
+                  sample_names[j], i, dmr$chr, dmr$start, dmr$end,
                   dmr$hypomethylation_strength, dmr$areaStat
                 ),
                 cex.main = 0.9
@@ -319,6 +305,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
     flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
   }
+
 
   # Check BSseq object structure
   flog.info(sprintf(
