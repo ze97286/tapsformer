@@ -83,10 +83,10 @@ log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_dmr_anal
 flog.appender(appender.file(log_dir))
 flog.info("Starting optimized DSS differential methylation analysis script")
 
-safe_plot <- function(filename, plot_func) {
+safe_plot <- function(filename, plot_func, width = 10, height = 8) {
   tryCatch(
     {
-      svglite(filename, width = 10, height = 8)
+      svglite::svglite(filename, width = width, height = height)
       plot_func()
       dev.off()
       flog.info(paste("Plot saved as", filename))
@@ -101,19 +101,19 @@ safe_plot <- function(filename, plot_func) {
 load_and_create_bsseq <- function(base_dir, prefix) {
   sample_files <- list.files(path = base_dir, pattern = paste0(prefix, "_sample_.*\\.rds$"), full.names = TRUE)
   sample_list <- lapply(sample_files, readRDS)
-  
+
   # Create the BSseq objects for all samples
   bsseq_list <- lapply(seq_along(sample_list), function(i) {
     sample_data <- sample_list[[i]]
     BSseq(
-      chr = sample_data$chr, 
+      chr = sample_data$chr,
       pos = sample_data$pos,
-      M = as.matrix(sample_data$X), 
+      M = as.matrix(sample_data$X),
       Cov = as.matrix(sample_data$N),
       sampleNames = paste0(prefix, "_", i)
     )
   })
-  
+
   # Combine all BSseq objects into one
   combined_bsseq <- do.call(bsseq::combine, bsseq_list)
   return(combined_bsseq)
@@ -271,7 +271,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       safe_plot(filename, function() {
         tryCatch(
           {
-            par(mfrow = c(2, 1), mar = c(4, 4, 3, 2))
+            par(mfrow = c(2, 1), mar = c(3, 3, 2, 1))
 
             # Plot tumour
             showOneDMR(dmr, tumour_bsseq, ext = ext)
@@ -294,12 +294,12 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
           }
         )
-      })
-      flog.info(sprintf("Processed DMR %d", i))
+      }, width = 12, height = 10) 
     }
 
     flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
   }
+
 
   # Check BSseq object structure
   flog.info(sprintf(
