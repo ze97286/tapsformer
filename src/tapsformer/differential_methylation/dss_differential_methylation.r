@@ -252,11 +252,16 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Visualizations
   flog.info("Creating visualizations")
 
-  plot_top_DMRs <- function(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50, ext = 50) {
+  plot_top_DMRs <- function(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50, ext = 0) {
     dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
     dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
 
     strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
+    n_samples <- ncol(tumour_bsseq) + ncol(control_bsseq)
+
+    # Get the sample names from the BSseq objects
+    tumour_sample_names <- sampleNames(tumour_bsseq)
+    control_sample_names <- sampleNames(control_bsseq)
 
     for (i in 1:nrow(strongest_dmrs)) {
       dmr <- strongest_dmrs[i, ]
@@ -271,21 +276,33 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       safe_plot(filename, function() {
         tryCatch(
           {
-            par(mfrow = c(2, 1), mar = c(3, 3, 2, 1))
+            par(mfrow = c(n_samples, 1), mar = c(3, 3, 2, 1))
 
-            # Plot tumour
-            showOneDMR(dmr, tumour_bsseq, ext = ext)
-            title(
-              main = sprintf(
-                "Tumour - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-              ),
-              cex.main = 0.9
-            )
+            # Plot tumour samples
+            for (j in 1:length(tumour_sample_names)) {
+              showOneDMR(dmr, tumour_bsseq[, j], ext = ext)
+              title(
+                main = sprintf(
+                  "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                  tumour_sample_names[j], i, dmr$chr, dmr$start, dmr$end,
+                  dmr$hypomethylation_strength, dmr$areaStat
+                ),
+                cex.main = 0.9
+              )
+            }
 
-            # Plot control
-            showOneDMR(dmr, control_bsseq, ext = ext)
-            title(main = "control", cex.main = 0.9)
+            # Plot control samples
+            for (j in 1:length(control_sample_names)) {
+              showOneDMR(dmr, control_bsseq[, j], ext = ext)
+              title(
+                main = sprintf(
+                  "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                  control_sample_names[j], i, dmr$chr, dmr$start, dmr$end,
+                  dmr$hypomethylation_strength, dmr$areaStat
+                ),
+                cex.main = 0.9
+              )
+            }
           },
           error = function(e) {
             flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
@@ -294,12 +311,11 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
             text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
           }
         )
-      }, width = 12, height = 10) 
+      }, width = 12, height = 10)
     }
 
     flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
   }
-
 
   # Check BSseq object structure
   flog.info(sprintf(
