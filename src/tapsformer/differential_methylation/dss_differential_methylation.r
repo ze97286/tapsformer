@@ -191,7 +191,9 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   # Perform DML test
   flog.info("Performing DML test")
-  dml_test <- DMLtest(combined_bsseq, group1 = c("tumour"), group2 = c("Control"), smoothing = TRUE)
+  group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
+  group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
 
   # Call DMRs
   flog.info("Calling DMRs")
@@ -355,7 +357,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
             # Plot control
             showOneDMR(dmr, control_bsseq, ext = ext)
-            title(main = "Control", cex.main = 0.9)
+            title(main = "control", cex.main = 0.9)
           },
           error = function(e) {
             flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
