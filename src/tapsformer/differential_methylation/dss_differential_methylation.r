@@ -99,7 +99,10 @@ safe_plot <- function(filename, plot_func, width = 10, height = 8) {
 }
 
 load_and_create_bsseq <- function(base_dir, prefix) {
-  sample_files <- list.files(path = base_dir, pattern = paste0(prefix, "_sample_.*\\.rds$"), full.names = TRUE)
+  sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
+  if (length(sample_files) == 0) {
+    stop("Error: No RDS files found with the given prefix.")
+  }
   sample_list <- lapply(sample_files, readRDS)
 
   # Create the BSseq objects for all samples
