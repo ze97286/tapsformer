@@ -3,7 +3,8 @@
 
 start_time <- Sys.time()
 
-source("dss_common.r")
+script_dir <- dirname(sys.frame(1)$ofile)
+source(file.path(script_dir, "dss_common.r"))
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
