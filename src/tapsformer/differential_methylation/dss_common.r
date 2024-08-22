@@ -385,35 +385,52 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
-    # Determine the number of samples in the combined_bsseq object
-    num_samples <- length(sampleNames(combined_bsseq))
+    # Split samples into tumor and control based on their names
+    tumor_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
+    control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+
+    # Determine the number of samples
+    num_tumor <- length(tumor_samples)
+    num_control <- length(control_samples)
 
     # Adjust margins and text size based on the number of samples
-    if (num_samples > 20) {
-        mar <- c(4, 4, 2, 2) + 0.1 # Smaller margins for larger sample sizes
-        cex_main <- 0.6 # Smaller text for large sample sizes
-        plot_width <- 20
-        plot_height <- 14
-    } else if (num_samples > 10) {
+    if (num_tumor + num_control > 20) {
+        mar <- c(4, 4, 2, 2) + 0.1
+        cex_main <- 0.6
+    } else if (num_tumor + num_control > 10) {
         mar <- c(5, 4, 3, 2) + 0.1
         cex_main <- 0.7
-        plot_width <- 18
-        plot_height <- 12
     } else {
-        mar <- c(7, 4, 4, 2) + 0.1 # Larger margins for fewer samples
+        mar <- c(7, 4, 4, 2) + 0.1
         cex_main <- 0.8
-        plot_width <- 16
-        plot_height <- 12
     }
+
+    # Dynamically adjust plot height based on the number of samples
+    plot_height <- max(12, (num_tumor + num_control) * 0.6)
 
     safe_plot(filename, function() {
         tryCatch(
             {
+                par(mfrow = c(1, 2))  # Set up a 1x2 plot layout
+
+                # Plot for tumor samples
                 par(mar = mar)
-                showOneDMR(dmr, combined_bsseq, ext = ext)
+                showOneDMR(dmr, combined_bsseq[tumor_samples], ext = ext)
                 title(
                     main = sprintf(
-                        "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                        "Tumor Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+                    ),
+                    cex.main = cex_main,
+                    line = 2
+                )
+
+                # Plot for control samples
+                par(mar = mar)
+                showOneDMR(dmr, combined_bsseq[control_samples], ext = ext)
+                title(
+                    main = sprintf(
+                        "Control Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
                         i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
                     ),
                     cex.main = cex_main,
@@ -426,5 +443,6 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
                 text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
             }
         )
-    }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
+    }, width = plot_width, height = plot_height)  
 }
+

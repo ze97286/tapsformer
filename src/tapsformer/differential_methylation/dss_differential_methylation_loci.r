@@ -45,39 +45,22 @@ gc()
 plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   methylation_data <- getMeth(combined_bsseq, type = "raw")
   plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
-  
   for (i in 1:nrow(top_hypo_dmls)) {
     dml <- top_hypo_dmls[i, ]
-    
-    # Debug: Print the DML being processed
-    print(sprintf("Processing DML: chr = %s, pos = %d", dml$chr, dml$pos))
-    
     # Find matching positions and log if no match is found
     matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
-    
-    # Debug: Print the matching indices
-    print(sprintf("Matching indices found: %s", paste(matching_indices, collapse = ", ")))
-    
     meth_levels <- methylation_data[matching_indices, ]
-    
-    # Debug: Print the methylation levels
-    print("Methylation levels:")
-    print(meth_levels)
-    
     if (is.null(meth_levels) || length(meth_levels) == 0) {
       flog.warn(sprintf("No valid methylation data found for DML at %s:%d", dml$chr, dml$pos), name = "dss_logger")
-      next  # Skip this iteration if no data is found
+      next
     }
-    
-    plot_data[i, (paste0("Sample_", 1:ncol(meth_levels))) := as.list(meth_levels)]
+    plot_data[i, (names(meth_levels)) := as.list(meth_levels)]
   }
-  
   # Melt the data for plotting
   plot_data <- melt(plot_data,
     id.vars = c("chr", "pos"),
     variable.name = "Sample", value.name = "MethylationLevel"
   )
-  
   # Plot function
   plot_func <- function() {
     ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
@@ -90,11 +73,9 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       ) +
       theme(axis.text.x = element_text(angle = 90, hjust = 1))
   }
-  
   # Save the plot
   output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
   safe_plot(output_filename, plot_func, width = 10, height = 8)
-  
   return(output_filename)
 }
 
