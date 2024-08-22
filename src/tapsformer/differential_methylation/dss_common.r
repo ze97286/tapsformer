@@ -37,23 +37,22 @@ suppressMessages(library(org.Hs.eg.db))
 suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
-
-test_logging <- function(logger) {
-    logger$info("This is a test log message.")
+test_logging <- function() {
+    flog.info("This is a test log message.", name = "dss_logger")
 }
 
 # Setup function for safe saving of svg plots to the output dir
-safe_plot <- function(filename, plot_func, logger, width = 10, height = 8) {
+safe_plot <- function(filename, plot_func, width = 10, height = 8) {
     tryCatch(
         {
             svglite::svglite(filename, width = width, height = height)
             plot_func()
             dev.off()
-            logger$info(paste("Plot saved as", filename))
+            flog.info(paste("Plot saved as", filename), name = "dss_logger")
         },
         error = function(e) {
             if (dev.cur() > 1) dev.off() # Close device if open
-            logger$error(paste("Error creating plot:", filename, "-", conditionMessage(e)))
+            flog.error(paste("Error creating plot:", filename, "-", conditionMessage(e)), name = "dss_logger")
         }
     )
 }
@@ -89,7 +88,7 @@ load_and_combine_bsseq <- function(base_dir, tumour_prefix, control_prefix) {
 }
 
 # a function for tagging dmls based on area stat quantiles. Saves a histogram of DMLs and their strength tag.
-analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir, logger) {
+analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir) {
     quantiles <- quantile(top_hypo_dmxs[[column_name]], probs = c(0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
     moderate_threshold <- quantiles["75%"]
     strong_threshold <- quantiles["90%"]
@@ -115,7 +114,7 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir, 
                 ) +
                 theme_minimal()
             print(p)
-        }, logger
+        }
     )
     return(list(
         moderate = moderate_threshold,
@@ -125,9 +124,9 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir, 
 }
 
 # Volcano plot
-create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, logger) {
+create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir) {
     if (pval_col %in% names(dmx_dt)) {
-        logger$info("Creating volcano plot")
+        flog.info("Creating volcano plot", name = "dss_logger")
         safe_plot(
             file.path(output_dir, "volcano_plot.svg"),
             function() {
@@ -145,18 +144,18 @@ create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, logger) 
                     ) +
                     theme_minimal()
                 print(plot)
-            }, logger
+            }
         )
         return(TRUE)
     } else {
-        logger$warn("Skipping volcano plot due to missing p-value column")
+        flog.warn("Skipping volcano plot due to missing p-value column", name = "dss_logger")
         return(FALSE)
     }
 }
 
 # Methylation difference distribution plot
-create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, logger) {
-    logger$info("Creating methylation difference distribution plot")
+create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir) {
+    flog.info("Creating methylation difference distribution plot", name = "dss_logger")
     safe_plot(
         file.path(output_dir, "methylation_difference_distribution.svg"),
         function() {
@@ -169,13 +168,13 @@ create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, logger) {
                 ) +
                 theme_minimal()
             print(plot)
-        }, logger
+        }
     )
     return(TRUE)
 }
 
-create_dmr_length_plot <- function(dmx_dt, output_dir, logger) {
-    logger$info("Creating DMR length distribution plot")
+create_dmr_length_plot <- function(dmx_dt, output_dir) {
+    flog.info("Creating DMR length distribution plot", name = "dss_logger")
     safe_plot(
         file.path(output_dir, "dmr_length_distribution.svg"),
         function() {
@@ -188,14 +187,14 @@ create_dmr_length_plot <- function(dmx_dt, output_dir, logger) {
                 ) +
                 theme_minimal()
             print(plot)
-        }, logger
+        }
     )
     return(TRUE) # Indicate success
 }
 
 # dmx by chromosome plot
-create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir, logger) {
-    logger$info("Creating chromosome coverage plot")
+create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
+    flog.info("Creating chromosome coverage plot", name = "dss_logger")
 
     # Create a data frame with chromosome sizes
     chr_sizes <- data.frame(
@@ -239,14 +238,14 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir, logger
 
     safe_plot(file.path(output_dir, "chromosome_coverage_plot.svg"), function() {
         print(p)
-    }, logger)
+    })
 
     return(TRUE) # Indicate success
 }
 
 # Manhattan plot
-create_manhattan_plot <- function(dmx_dt, output_dir, logger) {
-    logger("Creating Manhattan plot")
+create_manhattan_plot <- function(dmx_dt, output_dir) {
+    flog.info("Creating Manhattan plot", name = "dss_logger")
     safe_plot(
         file.path(output_dir, "manhattan_plot.svg"),
         function() {
@@ -265,13 +264,13 @@ create_manhattan_plot <- function(dmx_dt, output_dir, logger) {
                     legend.position = "none"
                 )
             print(plot)
-        }, logger
+        }
     )
 }
 
 # Q-Q Plot
-create_qq_plot <- function(dmx_dt, output_dir, logger) {
-    logger("Creating Q-Q plot")
+create_qq_plot <- function(dmx_dt, output_dir) {
+    flog.info("Creating Q-Q plot", name = "dss_logger")
     safe_plot(
         file.path(output_dir, "qq_plot.svg"),
         function() {
@@ -289,13 +288,13 @@ create_qq_plot <- function(dmx_dt, output_dir, logger) {
                 ) +
                 theme_minimal()
             print(plot)
-        }, logger
+        }
     )
 }
 
 # Pie chart of genomic context of differentially methylated regions/loci
-create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, logger) {
-    logger$info("Annotating regions with genomic context")
+create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
+    flog.info("Annotating regions with genomic context", name = "dss_logger")
 
     # Convert DMR/DML data to GRanges object
     dmx_gr <- GRanges(
@@ -339,7 +338,7 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, l
             dmx_annotation$Enhancer <- overlapsAny(dmx_gr, enhancers)
         },
         error = function(e) {
-            logger$warn("Failed to fetch enhancer data. Skipping enhancer annotation.")
+            flog.warn("Failed to fetch enhancer data. Skipping enhancer annotation.", name = "dss_logger")
             dmx_annotation$Enhancer <- FALSE
         }
     )
@@ -363,12 +362,12 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, l
 
     safe_plot(file.path(output_dir, "genomic_context_distribution.svg"), function() {
         print(p)
-    }, logger)
+    })
 
     return(list(dmx_dt = dmx_dt, plot = p)) # Return updated dmx_dt and the plot
 }
 
-plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext, logger) {
+plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     safe_plot(filename, function() {
         tryCatch(
             {
@@ -383,10 +382,10 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext, logger) {
                 )
             },
             error = function(e) {
-                logger$error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
+                flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)), name = "dss_logger")
                 plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
                 text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
             }
         )
-    }, logger, width = 14, height = 12)
+    }, width = 14, height = 12)
 }

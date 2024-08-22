@@ -31,10 +31,8 @@ base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation
 log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dml_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", suffix, delta, p.threshold, fdr.threshold))
 
 # set up logging
-flog.appender(appender.file(log_dir))
-flog.info("Starting DSS DML analysis")
-
-test_logging(flog)
+flog.logger("dss_logger", appender.file(log_dir))
+flog.info("Starting DSS DML analysis", name = "dss_logger")
 
 # data loading
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
@@ -66,7 +64,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       theme(axis.text.x = element_text(angle = 90, hjust = 1))
   }
   output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
-  safe_plot(output_filename, plot_func, flog, width = 10, height = 8)
+  safe_plot(output_filename, plot_func, width = 10, height = 8)
   return(output_filename)
 }
 
@@ -79,12 +77,12 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  flog.info("Performing DML test")
+  flog.info("Performing DML test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
 
-  flog.info("Calling DMLs")
+  flog.info("Calling DMLs", name = "dss_logger")
   dmls <- callDML(dml_test,
     delta = delta,
     p.threshold = p.threshold
@@ -101,7 +99,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmls, -stat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmls, "stat", output_dir, flog)
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmls, "stat", output_dir)
 
   # Tag differential methylation strength by quantile of areaStat
   top_hypo_dmls[, hypomethylation_strength := case_when(
@@ -117,16 +115,16 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     sep = "\t"
   )
 
-  flog.info("Creating visualizations")
+  flog.info("Creating visualizations", name = "dss_logger")
   strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$areaStat), ], 12)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
-  create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir, flog)
-  create_methylation_diff_plot(dml_dt, diff_col = "diff", output_dir, flog)
-  create_chromosome_coverage_plot(dml_dt, diff_col = "diff", output_dir, flog)
-  create_manhattan_plot(dml_dt, output_dir, flog)
-  create_qq_plot(dml_dt, output_dir, flog)
-  create_genomic_context_visualization(dml_dt, diff_col = "diff", output_dir, flog)
-  flog.info("Analysis complete")
+  create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir)
+  create_methylation_diff_plot(dml_dt, diff_col = "diff", output_dir)
+  create_chromosome_coverage_plot(dml_dt, diff_col = "diff", output_dir)
+  create_manhattan_plot(dml_dt, output_dir)
+  create_qq_plot(dml_dt, output_dir)
+  create_genomic_context_visualization(dml_dt, diff_col = "diff", output_dir)
+  flog.info("Analysis complete", name = "dss_logger")
   return(dml_dt)
 }
 
@@ -134,7 +132,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 flog.info(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f",
   delta, p.threshold, fdr.threshold
-))
+), name = "dss_logger")
 result <- perform_dml_analysis(combined_bsseq, base_dir,
   delta = delta,
   p.threshold = p.threshold,
@@ -145,14 +143,14 @@ result <- perform_dml_analysis(combined_bsseq, base_dir,
 stopCluster(cl)
 
 # Result Summary
-flog.info("Analysis Results Summary:")
-flog.info(sprintf("Total DMLs found: %d", nrow(result)))
-flog.info(sprintf("Hypomethylated DMLs in tumor: %d", sum(result$hypo_in_tumour)))
-flog.info(sprintf("Hypermethylated DMLs in tumor: %d", sum(!result$hypo_in_tumour)))
+flog.info("Analysis Results Summary:", name = "dss_logger")
+flog.info(sprintf("Total DMLs found: %d", nrow(result)), name = "dss_logger")
+flog.info(sprintf("Hypomethylated DMLs in tumor: %d", sum(result$hypo_in_tumour)), name = "dss_logger")
+flog.info(sprintf("Hypermethylated DMLs in tumor: %d", sum(!result$hypo_in_tumour)), name = "dss_logger")
 mean_diff <- mean(result$diff.meth)
-flog.info(sprintf("Mean methylation difference: %.4f", mean_diff))
+flog.info(sprintf("Mean methylation difference: %.4f", mean_diff), name = "dss_logger")
 median_diff <- median(result$diff.meth)
-flog.info(sprintf("Median methylation difference: %.4f", median_diff))
+flog.info(sprintf("Median methylation difference: %.4f", median_diff), name = "dss_logger")
 end_time <- Sys.time()
-flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
+flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"), name = "dss_logger")
 options(warn = 0)

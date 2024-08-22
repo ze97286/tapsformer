@@ -34,8 +34,8 @@ base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation
 log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dmr_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", suffix, delta, p.threshold, fdr.threshold))
 
 # Set up logging
-flog.appender(appender.file(log_dir))
-flog.info("Starting DSS DMR analysis")
+flog.logger("dss_logger", appender.file(log_dir))
+flog.info("Starting DSS DMR analysis", name = "dss_logger")
 
 # data loading
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
@@ -51,17 +51,17 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext
   for (i in 1:nrow(strongest_dmrs)) {
     dmr <- strongest_dmrs[i, ]
 
-    flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end))
+    flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end), name = "dss_logger")
 
     filename <- file.path(dmr_plot_dir, sprintf(
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
 
-    plot_single_dmr(filename, dmr, combined_bsseq, i, ext, flog)
+    plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
   }
 
-  flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
+  flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n), name = "dss_logger")
 }
 
 # this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
@@ -73,12 +73,12 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  flog.info("Performing DMR test")
+  flog.info("Performing DMR test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
 
-  flog.info("Calling DMRs")
+  flog.info("Calling DMRs", name = "dss_logger")
   dmrs <- callDMR(
     dml_test,
     delta = delta,
@@ -109,7 +109,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # select top hypomethylated DMLs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmrs, -areaStat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir, flog)
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir)
 
   # tag differential methylation strength by quantile of areastat
   top_hypo_dmrs[, hypomethylation_strength := case_when(
@@ -126,16 +126,16 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )
 
   # Visualizations
-  flog.info("Creating visualizations")
+  flog.info("Creating visualizations", name = "dss_logger")
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
-  create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir, flog)
-  create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir, flog)
-  create_chromosome_coverage_plot(dmr_dt, diff_col = "diff.Methy", output_dir, flog)
-  create_dmr_length_plot(dmr_dt, output_dir, flog)
-  create_manhattan_plot(dmr_dt, output_dir, flog)
-  create_qq_plot(dmr_dt, output_dir, flog)
-  create_genomic_context_visualization(dmr_dt, diff_col = "diff.Methy", output_dir, flog)
-  flog.info("Analysis complete")
+  create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir)
+  create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
+  create_chromosome_coverage_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
+  create_dmr_length_plot(dmr_dt, output_dir)
+  create_manhattan_plot(dmr_dt, output_dir)
+  create_qq_plot(dmr_dt, output_dir)
+  create_genomic_context_visualization(dmr_dt, diff_col = "diff.Methy", output_dir)
+  flog.info("Analysis complete", name = "dss_logger")
   return(dmr_dt)
 }
 
@@ -143,7 +143,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 flog.info(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
-))
+), name = "dss_logger")
 result <- perform_dmr_analysis(combined_bsseq, base_dir,
   delta = delta,
   p.threshold = p.threshold,
@@ -157,14 +157,14 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir,
 stopCluster(cl)
 
 # Result Summary
-flog.info("Analysis Results Summary:")
-flog.info(sprintf("Total DMRs found: %d", nrow(result)))
-flog.info(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)))
-flog.info(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)))
+flog.info("Analysis Results Summary:", name = "dss_logger")
+flog.info(sprintf("Total DMRs found: %d", nrow(result)), name = "dss_logger")
+flog.info(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)), name = "dss_logger")
+flog.info(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)), name = "dss_logger")
 mean_diff <- mean(result$diff.Methy)
-flog.info(sprintf("Mean methylation difference: %.4f", mean_diff))
+flog.info(sprintf("Mean methylation difference: %.4f", mean_diff), name = "dss_logger")
 median_diff <- median(result$diff.Methy)
-flog.info(sprintf("Median methylation difference: %.4f", median_diff))
+flog.info(sprintf("Median methylation difference: %.4f", median_diff), name = "dss_logger")
 end_time <- Sys.time()
-flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
+flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"), name = "dss_logger")
 options(warn = 0)
