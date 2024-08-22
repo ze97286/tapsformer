@@ -103,17 +103,17 @@ load_and_create_bsseq <- function(base_dir, prefix) {
   if (length(sample_files) == 0) {
     stop("Error: No RDS files found with the given prefix.")
   }
-  sample_list <- lapply(sample_files, readRDS)
 
   # Create the BSseq objects for all samples
-  bsseq_list <- lapply(seq_along(sample_list), function(i) {
-    sample_data <- sample_list[[i]]
+  bsseq_list <- lapply(sample_files, function(file_path) {
+    sample_data <- readRDS(file_path)
+    sample_name <- gsub(paste0("^", prefix, "_"), "", gsub("\\.rds$", "", basename(file_path)))
     BSseq(
       chr = sample_data$chr,
       pos = sample_data$pos,
       M = as.matrix(sample_data$X),
       Cov = as.matrix(sample_data$N),
-      sampleNames = paste0(prefix, "_", i)
+      sampleNames = sample_name
     )
   })
 
@@ -121,7 +121,6 @@ load_and_create_bsseq <- function(base_dir, prefix) {
   combined_bsseq <- do.call(bsseq::combine, bsseq_list)
   return(combined_bsseq)
 }
-
 
 # Load the data
 tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
@@ -255,15 +254,11 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Visualizations
   flog.info("Creating visualizations")
 
-  plot_top_DMRs <- function(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50, ext = 0) {
+  plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 0) {
     dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
     dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
 
     strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
-    n_samples <- ncol(tumour_bsseq) + ncol(control_bsseq)
-
-    # Get the sample names from the BSseq objects
-    sample_names <- c(sampleNames(tumour_bsseq), sampleNames(control_bsseq))
 
     for (i in 1:nrow(strongest_dmrs)) {
       dmr <- strongest_dmrs[i, ]
@@ -278,39 +273,17 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       safe_plot(filename, function() {
         tryCatch(
           {
-            par(mfrow = c(n_samples, 1), mar = c(3, 4, 2, 2)) # Slightly adjusted margins
-
-            # Plot tumour samples
-            for (j in 1:ncol(tumour_bsseq)) {
-              sample_bsseq <- tumour_bsseq[, j, drop = FALSE] # Subset by column, keep as BSseq object
-              showOneDMR(dmr, sample_bsseq, ext = ext)
-              title(
-                main = sprintf(
-                  "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                  sampleNames(tumour_bsseq)[j], i, dmr$chr, dmr$start, dmr$end,
-                  dmr$hypomethylation_strength, dmr$areaStat
-                ),
-                cex.main = 0.9
-              )
-            }
-
-            # Plot control samples
-            for (j in 1:ncol(control_bsseq)) {
-              sample_bsseq <- control_bsseq[, j, drop = FALSE] # Subset by column, keep as BSseq object
-              showOneDMR(dmr, sample_bsseq, ext = ext)
-              title(
-                main = sprintf(
-                  "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                  sampleNames(control_bsseq)[j], i, dmr$chr, dmr$start, dmr$end,
-                  dmr$hypomethylation_strength, dmr$areaStat
-                ),
-                cex.main = 0.9
-              )
-            }
+            showOneDMR(dmr, combined_bsseq, ext = ext)
+            title(
+              main = sprintf(
+                "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+              ),
+              cex.main = 0.9
+            )
           },
           error = function(e) {
             flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
-            # Create a simple error plot
             plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
             text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
           }
@@ -323,18 +296,9 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
 
 
-  # Check BSseq object structure
-  flog.info(sprintf(
-    "Tumour BSseq object: %d samples, %d features",
-    ncol(tumour_bsseq), nrow(tumour_bsseq)
-  ))
-  flog.info(sprintf(
-    "Control BSseq object: %d samples, %d features",
-    ncol(control_bsseq), nrow(control_bsseq)
-  ))
 
   # Then call the function
-  plot_top_DMRs(top_hypo_dmrs, tumour_bsseq, control_bsseq, output_dir, n = 50)
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
 
   # 1. Volcano plot
   if ("pval" %in% names(dmr_dt)) {
