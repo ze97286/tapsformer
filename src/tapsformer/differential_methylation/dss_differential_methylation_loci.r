@@ -121,7 +121,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )
 
   flog.info("Creating visualizations", name = "dss_logger")
-  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$areaStat), ], 12)
+  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 12)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
   create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir)
   create_methylation_diff_plot(dml_dt, diff_col = "diff", output_dir)
