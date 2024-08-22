@@ -260,6 +260,8 @@ create_manhattan_plot <- function(dmx_dt, output_dir) {
     # Add cumulative position
     chr_sizes$cumpos <- cumsum(as.numeric(chr_sizes$size))
     chr_sizes$pos <- chr_sizes$cumpos - chr_sizes$size / 2
+    dmx_dt$chr_num <- as.numeric(sub("chr", "", dmx_dt$chr))
+    dmx_dt$cumpos <- dmx_dt$start + chr_sizes$cumpos[match(dmx_dt$chr, chr_sizes$chr)] - chr_sizes$size[match(dmx_dt$chr, chr_sizes$chr)]
 
     safe_plot(
         file.path(output_dir, "manhattan_plot.svg"),
