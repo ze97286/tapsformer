@@ -1,12 +1,13 @@
 # git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw
 # git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw_with_liver
 
-args <- commandArgs(trailingOnly = TRUE)
+start_time <- Sys.time()
 
+# initialise command line args
+args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 7) {
   stop("Usage: Rscript dmr_analysis.R <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge>")
 }
-
 delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
 fdr.threshold <- as.numeric(args[3])
@@ -15,8 +16,7 @@ min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
 suffix <- args[7]
 
-start_time <- Sys.time()
-
+# load libraries
 install_and_load <- function(pkg) {
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
   if (length(new.pkg)) {
@@ -25,7 +25,6 @@ install_and_load <- function(pkg) {
   sapply(pkg, require, character.only = TRUE)
 }
 
-# Function for Bioconductor packages
 bioc_install_and_load <- function(pkg) {
   if (!requireNamespace("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager")
@@ -37,29 +36,20 @@ bioc_install_and_load <- function(pkg) {
   sapply(pkg, require, character.only = TRUE)
 }
 
-# Set CRAN mirror
 options(repos = c(CRAN = "https://cloud.r-project.org"))
-
-# Define packages
 bioc_packages <- c(
   "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
   "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub"
 )
 cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
-
-# Install and load packages
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
-
-# Print loaded package versions
 sessionInfo()
 
-# Set up parallel processing
+# setup parallel processing
 library(parallel)
-num_cores <- detectCores() - 1 # Use all but one core
+num_cores <- detectCores() - 1
 cl <- makeCluster(num_cores)
-
-# Load required packages on all cores
 clusterEvalQ(cl, {
   library(DSS)
   library(data.table)
@@ -77,7 +67,7 @@ suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
-log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_dmr_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", delta, p.threshold, fdr.threshold))
+log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dmr_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", suffix, delta, p.threshold, fdr.threshold))
 
 # Set up logging
 flog.appender(appender.file(log_dir))
@@ -98,16 +88,16 @@ safe_plot <- function(filename, plot_func, width = 10, height = 8) {
   )
 }
 
+# data loading
+# load all rds files with methylation counters per cpg for tumour and control (=prefix)
 load_and_create_bsseq <- function(base_dir, prefix) {
   sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
   if (length(sample_files) == 0) {
     stop("Error: No RDS files found with the given prefix.")
   }
-
-  # Create the BSseq objects for all samples
   bsseq_list <- lapply(sample_files, function(file_path) {
     sample_data <- readRDS(file_path)
-    sample_name <- gsub("\\.rds$", "", basename(file_path))  # Keep the full name including the prefix
+    sample_name <- gsub("\\.rds$", "", basename(file_path))
     BSseq(
       chr = sample_data$chr,
       pos = sample_data$pos,
@@ -116,23 +106,16 @@ load_and_create_bsseq <- function(base_dir, prefix) {
       sampleNames = sample_name
     )
   })
-
-  # Combine the list of BSseq objects into one BSseq object
   combined_bsseq <- do.call(combineList, bsseq_list)
-
   return(combined_bsseq)
 }
 
-# Load the data
 tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
 control_bsseq <- load_and_create_bsseq(base_dir, "control")
-
-# Combine tumour and control BSseq objects
 combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
-
-saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
 gc()
 
+# a function for tagging dmls based on area stat quantiles. Saves a histogram of DMLs and their strength tag.
 analyze_areastat_thresholds <- function(top_hypo_dmrs, output_dir) {
   flog.info("Analyzing areaStat distribution and thresholds")
 
@@ -185,6 +168,50 @@ analyze_areastat_thresholds <- function(top_hypo_dmrs, output_dir) {
   ))
 }
 
+# generate a plot of top DMRs and their methylation levels in each sample
+plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 0) {
+  dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
+  dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
+
+  strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
+
+  for (i in 1:nrow(strongest_dmrs)) {
+    dmr <- strongest_dmrs[i, ]
+
+    flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end))
+
+    filename <- file.path(dmr_plot_dir, sprintf(
+      "DMR_%d_chr%s_%d-%d.svg",
+      i, dmr$chr, dmr$start, dmr$end
+    ))
+
+    safe_plot(filename, function() {
+      tryCatch(
+        {
+          par(mar = c(5, 4, 4, 2) + 0.1) # Adjust the margins
+          showOneDMR(dmr, combined_bsseq, ext = ext)
+          title(
+            main = sprintf(
+              "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+              i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+            ),
+            cex.main = 0.8 # Adjust title text size
+          )
+        },
+        error = function(e) {
+          flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
+          plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
+          text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
+        }
+      )
+    }, width = 14, height = 12) # Increase plot size
+  }
+
+  flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
+}
+
+# this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
+# saving the output and visualisations.
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl) {
   output_dir <- file.path(base_dir, sprintf(
     "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
@@ -192,27 +219,25 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  # Perform DML test
   flog.info("Performing DML test")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
 
-  # Call DMRs
   flog.info("Calling DMRs")
-  dmrs <- callDMR(dml_test,
-    delta = delta, p.threshold = p.threshold,
-    minlen = min.len, minCG = min.CpG, dis.merge = dis.merge
+  dmrs <- callDMR(
+    dml_test,
+    delta = delta,
+    p.threshold = p.threshold,
+    minlen = min.len,
+    minCG = min.CpG,
+    dis.merge = dis.merge
   )
 
-  # Convert DMRs to data.table
   dmr_dt <- as.data.table(dmrs)
-
-  # Extract p-values from DML test results for the CpGs in our DMRs
   dml_results <- as.data.table(dml_test)
   setkey(dml_results, chr, pos)
 
-  # Function to get minimum p-value for each DMR (to be used in parallel)
   get_min_pval <- function(dmr) {
     pvals <- dml_results[.(dmr$chr, dmr$start:dmr$end), on = .(chr, pos), nomatch = 0]$pval
     if (length(pvals) == 0) {
@@ -220,25 +245,19 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     }
     min(pvals, na.rm = TRUE)
   }
-
-  # Add minimum p-value for each DMR (in parallel)
   dmr_dt[, pval := parSapply(cl, split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)]
-
-  # Calculate FDR
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
-
-  # Flag hypo-methylated regions in tumour and apply FDR threshold
   dmr_dt[, `:=`(
     hypo_in_tumour = diff.Methy < 0,
     significant_after_fdr = fdr < fdr.threshold
   )]
 
-  # Select top hypomethylated DMRs after FDR correction
+  # select top hypomethylated DMLs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmrs, -areaStat)
   thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, output_dir)
 
-  # You can then use these thresholds in your analysis, e.g.:
+  # tag differential methylation strength by quantile of areastat
   top_hypo_dmrs[, hypomethylation_strength := case_when(
     areaStat < thresholds$very_strong ~ "Very Strong",
     areaStat < thresholds$strong ~ "Strong",
@@ -246,7 +265,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     TRUE ~ "Weak"
   )]
 
-  # Write results to BED file
+  # save output
   fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
     file.path(output_dir, "hypomethylated_dmrs.bed"),
     sep = "\t"
@@ -255,53 +274,9 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Visualizations
   flog.info("Creating visualizations")
 
-  plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 0) {
-    dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
-    dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
-
-    strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
-
-    for (i in 1:nrow(strongest_dmrs)) {
-      dmr <- strongest_dmrs[i, ]
-
-      flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end))
-
-      filename <- file.path(dmr_plot_dir, sprintf(
-        "DMR_%d_chr%s_%d-%d.svg",
-        i, dmr$chr, dmr$start, dmr$end
-      ))
-
-      safe_plot(filename, function() {
-        tryCatch(
-          {
-            showOneDMR(dmr, combined_bsseq, ext = ext)
-            title(
-              main = sprintf(
-                "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-              ),
-              cex.main = 0.9
-            )
-          },
-          error = function(e) {
-            flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
-            plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
-            text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
-          }
-        )
-      }, width = 12, height = 10)
-    }
-
-    flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
-  }
-
-
-
-
-  # Then call the function
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
 
-  # 1. Volcano plot
+  # volcano plot
   if ("pval" %in% names(dmr_dt)) {
     flog.info("Creating volcano plot")
     safe_plot(
@@ -579,7 +554,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   return(dmr_dt)
 }
 
-# Perform analysis with provided parameters
+# perform analysis with provided parameters
 flog.info(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
@@ -594,13 +569,6 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir,
   cl = cl
 )
 
-# Save the result
-saveRDS(result, file.path(base_dir, sprintf(
-  "delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
-), "dmr_results.rds"))
-
-# Stop the cluster
 stopCluster(cl)
 
 # Result Summary
@@ -608,17 +576,10 @@ flog.info("Analysis Results Summary:")
 flog.info(sprintf("Total DMRs found: %d", nrow(result)))
 flog.info(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)))
 flog.info(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)))
-
-# Calculate mean methylation difference
 mean_diff <- mean(result$diff.Methy)
 flog.info(sprintf("Mean methylation difference: %.4f", mean_diff))
-
-# Calculate median methylation difference
 median_diff <- median(result$diff.Methy)
 flog.info(sprintf("Median methylation difference: %.4f", median_diff))
-
 end_time <- Sys.time()
 flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
-
-# Restore warning level at the end of the script
 options(warn = 0)

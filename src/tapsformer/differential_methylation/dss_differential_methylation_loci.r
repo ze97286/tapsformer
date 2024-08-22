@@ -1,22 +1,19 @@
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw_with_liver
-
-args <- commandArgs(trailingOnly = TRUE)
-
-if (length(args) != 7) {
-  stop("Usage: Rscript dml_analysis.R <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge>")
-}
-
-delta <- as.numeric(args[1])
-p.threshold <- as.numeric(args[2])
-fdr.threshold <- as.numeric(args[3])
-min.CpG <- as.numeric(args[4])
-min.len <- as.numeric(args[5])
-dis.merge <- as.numeric(args[6])
-suffix <- args[7]
+# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.4 0.05 0.01 raw
+# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.4 0.05 0.01 raw_with_liver
 
 start_time <- Sys.time()
 
+# initialise command line args
+args <- commandArgs(trailingOnly = TRUE)
+if (length(args) != 4) {
+  stop("Usage: Rscript dml_analysis.R <delta> <p.threshold> <fdr.threshold> <suffix>")
+}
+delta <- as.numeric(args[1])
+p.threshold <- as.numeric(args[2])
+fdr.threshold <- as.numeric(args[3])
+suffix <- args[4]
+
+# load libraries
 install_and_load <- function(pkg) {
   new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
   if (length(new.pkg)) {
@@ -25,7 +22,6 @@ install_and_load <- function(pkg) {
   sapply(pkg, require, character.only = TRUE)
 }
 
-# Function for Bioconductor packages
 bioc_install_and_load <- function(pkg) {
   if (!requireNamespace("BiocManager", quietly = TRUE)) {
     install.packages("BiocManager")
@@ -37,29 +33,20 @@ bioc_install_and_load <- function(pkg) {
   sapply(pkg, require, character.only = TRUE)
 }
 
-# Set CRAN mirror
 options(repos = c(CRAN = "https://cloud.r-project.org"))
-
-# Define packages
 bioc_packages <- c(
   "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
   "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub"
 )
 cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "reshape")
-
-# Install and load packages
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
-
-# Print loaded package versions
 sessionInfo()
 
-# Set up parallel processing
+# setup parallel processing
 library(parallel)
-num_cores <- detectCores() - 1 # Use all but one core
+num_cores <- detectCores() - 1
 cl <- makeCluster(num_cores)
-
-# Load required packages on all cores
 clusterEvalQ(cl, {
   library(DSS)
   library(data.table)
@@ -76,13 +63,15 @@ suppressMessages(library(org.Hs.eg.db))
 suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
+# initialise dirs
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
-log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_dml_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", delta, p.threshold, fdr.threshold))
+log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dml_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", suffix, delta, p.threshold, fdr.threshold))
 
-# Set up logging
+# set up logging
 flog.appender(appender.file(log_dir))
-flog.info("Starting optimized DSS differential methylation analysis script")
+flog.info("Starting optimized DSS DML analysis")
 
+# setup function for safe saving of svg plots to the output dir
 safe_plot <- function(filename, plot_func, width = 10, height = 8) {
   tryCatch(
     {
@@ -98,16 +87,16 @@ safe_plot <- function(filename, plot_func, width = 10, height = 8) {
   )
 }
 
+# data loading
+# load all rds files with methylation counters per cpg for tumour and control (=prefix)
 load_and_create_bsseq <- function(base_dir, prefix) {
   sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
   if (length(sample_files) == 0) {
     stop("Error: No RDS files found with the given prefix.")
   }
-
-  # Create the BSseq objects for all samples
   bsseq_list <- lapply(sample_files, function(file_path) {
     sample_data <- readRDS(file_path)
-    sample_name <- gsub("\\.rds$", "", basename(file_path))  # Keep the full name including the prefix
+    sample_name <- gsub("\\.rds$", "", basename(file_path))
     BSseq(
       chr = sample_data$chr,
       pos = sample_data$pos,
@@ -123,36 +112,23 @@ load_and_create_bsseq <- function(base_dir, prefix) {
   return(combined_bsseq)
 }
 
-# Load the data
 tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
 control_bsseq <- load_and_create_bsseq(base_dir, "control")
-
-# Combine tumour and control BSseq objects
 combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
-
-saveRDS(combined_bsseq, file.path(base_dir, "combined_bsseq.rds"))
 gc()
 
+# a function for tagging dmls based on area stat quantiles. Saves a histogram of DMLs and their strength tag.
 analyze_areastat_thresholds <- function(top_hypo_dmls, output_dir) {
   flog.info("Analyzing areaStat distribution and thresholds")
-
-  # Calculate quantiles
   quantiles <- quantile(top_hypo_dmls$areaStat, probs = c(0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
-
   flog.info("areaStat quantiles:")
-  print(quantiles)
-
-  # Suggest thresholds
   moderate_threshold <- quantiles["75%"]
   strong_threshold <- quantiles["90%"]
   very_strong_threshold <- quantiles["99%"]
-
   flog.info(sprintf("Suggested thresholds for hypomethylation strength:"))
   flog.info(sprintf("Moderate: < %.2f", moderate_threshold))
   flog.info(sprintf("Strong: < %.2f", strong_threshold))
   flog.info(sprintf("Very strong: < %.2f", very_strong_threshold))
-
-  # Create histogram
   safe_plot(
     file.path(output_dir, "areastat_distribution.svg"),
     function() {
@@ -176,8 +152,6 @@ analyze_areastat_thresholds <- function(top_hypo_dmls, output_dir) {
       print(p)
     }
   )
-
-  # Return thresholds
   return(list(
     moderate = moderate_threshold,
     strong = strong_threshold,
@@ -185,51 +159,72 @@ analyze_areastat_thresholds <- function(top_hypo_dmls, output_dir) {
   ))
 }
 
-perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl) {
+# generate a plot of top DMLs and their methylation levels in each sample
+plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
+  methylation_data <- getMeth(combined_bsseq, type = "raw")
+  plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
+  for (i in 1:nrow(top_hypo_dmls)) {
+    dml <- top_hypo_dmls[i, ]
+    meth_levels <- methylation_data[which(seqnames(combined_bsseq) == dml$chr &
+      start(combined_bsseq) == dml$pos), ]
+    plot_data[i, (paste0("Sample_", 1:ncol(meth_levels))) := as.list(meth_levels)]
+  }
+  plot_data <- melt(plot_data,
+    id.vars = c("chr", "pos"),
+    variable.name = "Sample", value.name = "MethylationLevel"
+  )
+  plot_func <- function() {
+    ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
+      geom_point() +
+      facet_wrap(~ chr + pos, scales = "free_y") +
+      theme_bw() +
+      labs(
+        title = "Methylation Levels Across Samples for Each DML",
+        x = "Sample", y = "Methylation Level"
+      ) +
+      theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  }
+  output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
+  safe_plot(output_filename, plot_func, width = 10, height = 8)
+  return(output_filename)
+}
+
+# this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
+# saving the output and visualisations.
+perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, cl) {
   output_dir <- file.path(base_dir, sprintf(
-    "dml_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
-    delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
+    "dml_delta_%.2f_p_%.4f_fdr_%.2f",
+    delta, p.threshold, fdr.threshold
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  # Perform DML test
   flog.info("Performing DML test")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
 
-  # Call DMLs
   flog.info("Calling DMLs")
   dmls <- callDML(dml_test,
     delta = delta,
-    p.threshold = p.threshold,
-    smoothing = TRUE,
-    minCoverage = 5,
-    stat = "fdr",
+    p.threshold = p.threshold
   )
 
-  # Convert DMLs to data.table
+  # FDR correction manually to the p-values
+  dmls$fdr <- p.adjust(dmls$pval, method = "BH")
   dml_dt <- as.data.table(dmls)
 
-  # Extract p-values from DML test results for the CpGs in our DMLs
-  dml_results <- as.data.table(dml_test)
-  setkey(dml_results, chr, pos)
-
-  # Since p-values are already corrected, you don't need to calculate the minimum p-value again.
-  # The callDML already applies FDR, so we skip this step.
-
-  # Flag hypo-methylated regions in the tumour and check significance
+  # identify hypomethylated regions in the tumour and check significance
   dml_dt[, `:=`(
     hypo_in_tumour = diff.meth < 0,
     significant_after_fdr = fdr < fdr.threshold
   )]
 
-  # Select top hypomethylated DMLs after FDR correction
+  # select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmls, -areaStat)
   thresholds <- analyze_areastat_thresholds(top_hypo_dmls, output_dir)
 
-  # You can then use these thresholds in your analysis, e.g.:
+  # tag differential methylation strength by quantile of areastat
   top_hypo_dmls[, hypomethylation_strength := case_when(
     areaStat < thresholds$very_strong ~ "Very Strong",
     areaStat < thresholds$strong ~ "Strong",
@@ -237,62 +232,17 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     TRUE ~ "Weak"
   )]
 
-  # Write results to BED file
+  # save output
   fwrite(top_hypo_dmls[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
     file.path(output_dir, "hypomethylated_dmls.bed"),
     sep = "\t"
   )
 
-  # Visualizations
   flog.info("Creating visualizations")
-
-  plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
-    # Extract methylation data for the DMLs
-    methylation_data <- getMeth(combined_bsseq, type = "raw")
-
-    # Prepare the data table
-    plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
-
-    # Add methylation levels from all samples
-    for (i in 1:nrow(top_hypo_dmls)) {
-      dml <- top_hypo_dmls[i, ]
-      meth_levels <- methylation_data[which(seqnames(combined_bsseq) == dml$chr &
-        start(combined_bsseq) == dml$pos), ]
-      plot_data[i, (paste0("Sample_", 1:ncol(meth_levels))) := as.list(meth_levels)]
-    }
-
-    # Reshape the data for ggplot
-    plot_data <- melt(plot_data,
-      id.vars = c("chr", "pos"),
-      variable.name = "Sample", value.name = "MethylationLevel"
-    )
-
-    # Define the plot function
-    plot_func <- function() {
-      ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
-        geom_point() +
-        facet_wrap(~ chr + pos, scales = "free_y") +
-        theme_bw() +
-        labs(
-          title = "Methylation Levels Across Samples for Each DML",
-          x = "Sample", y = "Methylation Level"
-        ) +
-        theme(axis.text.x = element_text(angle = 90, hjust = 1))
-    }
-
-    # Define the output filename
-    output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
-
-    # Use safe_plot to save the plot to disk
-    safe_plot(output_filename, plot_func, width = 10, height = 8)
-
-    # Return the path to the saved plot
-    return(output_filename)
-  }
   strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$areaStat), ], 12)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
 
-  # 1. Volcano plot
+  # volcano plot
   if ("pval" %in% names(dml_dt)) {
     flog.info("Creating volcano plot")
     safe_plot(
@@ -318,7 +268,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     flog.warn("Skipping volcano plot due to missing 'pval' column")
   }
 
-  # 2. Methylation difference distribution
+  # methylation difference distribution
   flog.info("Creating methylation difference distribution plot")
   safe_plot(
     file.path(output_dir, "methylation_difference_distribution.svg"),
@@ -335,24 +285,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     }
   )
 
-  # 3. DML length distribution
-  flog.info("Creating DML length distribution plot")
-  safe_plot(
-    file.path(output_dir, "dml_length_distribution.svg"),
-    function() {
-      plot <- ggplot(dml_dt, aes(x = length)) +
-        geom_histogram(binwidth = 50, fill = "lightgreen", color = "black") +
-        labs(
-          title = "Distribution of DML Lengths",
-          x = "DML Length (bp)",
-          y = "Count"
-        ) +
-        theme_minimal()
-      print(plot)
-    }
-  )
-
-  # Create a data frame with chromosome sizes
+  # chromosome coverage plot
   chr_sizes <- data.frame(
     chr = paste0("chr", c(1:22, "X", "Y")),
     size = c(
@@ -362,16 +295,10 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       156040895, 57227415
     )
   )
-
-  # Add cumulative position
   chr_sizes$cumpos <- cumsum(as.numeric(chr_sizes$size))
   chr_sizes$pos <- chr_sizes$cumpos - chr_sizes$size / 2
-
-  # Add chromosome and cumulative position to DML data
   dml_dt$chr_num <- as.numeric(sub("chr", "", dml_dt$chr))
   dml_dt$cumpos <- dml_dt$start + chr_sizes$cumpos[match(dml_dt$chr, chr_sizes$chr)] - chr_sizes$size[match(dml_dt$chr, chr_sizes$chr)]
-
-  # Create the chromosome coverage plot
   p <- ggplot(dml_dt, aes(x = cumpos, y = diff.meth, color = diff.meth < 0)) +
     geom_point(alpha = 0.5) +
     scale_color_manual(
@@ -396,7 +323,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     print(p)
   })
 
-  # Manhattan Plot
+  # manhattan plot
   create_manhattan_plot <- function(dml_dt, output_dir) {
     flog.info("Creating Manhattan plot")
     safe_plot(
@@ -445,85 +372,27 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     )
   }
 
-  # Heatmap of Top DMLs
-  create_top_dml_heatmap <- function(combined_bsseq, dml_dt, output_dir, top_n = 100) {
-    flog.info("Creating heatmap of top DMLs")
-    safe_plot(
-      file.path(output_dir, "top_dml_heatmap.png"), # Changed to PNG for testing
-      function() {
-        # Check if dml_dt is not empty
-        if (nrow(dml_dt) == 0) {
-          flog.error("dml_dt is empty. Cannot create heatmap.")
-          return(NULL)
-        }
-
-        top_dmls <- head(dml_dt[order(-abs(areaStat))], n = top_n)
-
-        # Check if top_dmls is not empty
-        if (nrow(top_dmls) == 0) {
-          flog.error("No top DMLs selected. Cannot create heatmap.")
-          return(NULL)
-        }
-
-        dml_ranges <- GRanges(
-          seqnames = top_dmls$chr,
-          ranges = IRanges(start = top_dmls$start, end = top_dmls$end)
-        )
-
-        meth_mat <- getMeth(combined_bsseq, regions = dml_ranges, type = "smooth", what = "perRegion")
-
-        # Check if meth_mat is not empty
-        if (is.null(meth_mat) || all(is.na(meth_mat))) {
-          flog.error("Methylation matrix is empty or all NA. Cannot create heatmap.")
-          return(NULL)
-        }
-
-        # Print dimensions of meth_mat for debugging
-        flog.info(sprintf("Methylation matrix dimensions: %d rows, %d columns", nrow(meth_mat), ncol(meth_mat)))
-
-        pheatmap(meth_mat,
-          scale = "none",
-          cluster_rows = TRUE,
-          cluster_cols = TRUE,
-          show_rownames = FALSE,
-          main = paste("Methylation Levels of Top", top_n, "DMLs"),
-          filename = file.path(output_dir, "top_dml_heatmap.png")
-        ) # Changed to PNG
-      }
-    )
-  }
-
   create_manhattan_plot(dml_dt, output_dir)
   create_qq_plot(dml_dt, output_dir)
-  create_top_dml_heatmap(combined_bsseq, dml_dt, output_dir)
 
-  # Genomic Context Visualization
+  # genomic context visualization
   flog.info("Annotating DMLs with genomic context")
   dml_gr <- GRanges(
     seqnames = dml_dt$chr,
     ranges = IRanges(start = dml_dt$start, end = dml_dt$end),
     diff.meth = dml_dt$diff.meth
   )
-
-  # Get genomic features
   txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
-
-  # Filter out non-standard chromosomes
   standard_chromosomes <- paste0("chr", c(1:22))
   dml_gr <- dml_gr[seqnames(dml_gr) %in% standard_chromosomes]
-
   promoters <- promoters(txdb)
   genes <- suppressWarnings(genes(txdb, single.strand.genes.only = TRUE))
   exons <- exons(txdb)
   introns <- gaps(exons)
-
-  # Ensure all genomic features are on standard chromosomes
   promoters <- promoters[seqnames(promoters) %in% standard_chromosomes]
   genes <- genes[seqnames(genes) %in% standard_chromosomes]
   exons <- exons[seqnames(exons) %in% standard_chromosomes]
   introns <- introns[seqnames(introns) %in% standard_chromosomes]
-
-  # Annotate DMLs
   dml_annotation <- data.frame(
     DML = seq_along(dml_gr),
     Promoter = overlapsAny(dml_gr, promoters),
@@ -531,7 +400,6 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     Exon = overlapsAny(dml_gr, exons),
     Intron = overlapsAny(dml_gr, introns)
   )
-
   tryCatch(
     {
       ah <- AnnotationHub()
@@ -544,13 +412,9 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       dml_annotation$Enhancer <- FALSE
     }
   )
-
-  # Add annotation to original data
   dml_dt$genomic_context <- apply(dml_annotation[, -1], 1, function(x) {
     paste(names(x)[x], collapse = ";")
   })
-
-  # Visualize genomic context distribution
   genomic_context_summary <- dml_dt %>%
     tidyr::separate_rows(genomic_context, sep = ";") %>%
     dplyr::group_by(genomic_context) %>%
@@ -570,28 +434,18 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   return(dml_dt)
 }
 
-# Perform analysis with provided parameters
+# perform analysis with provided parameters
 flog.info(sprintf(
-  "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
+  "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f",
+  delta, p.threshold, fdr.threshold
 ))
 result <- perform_dml_analysis(combined_bsseq, base_dir,
   delta = delta,
   p.threshold = p.threshold,
   fdr.threshold = fdr.threshold,
-  min.CpG = min.CpG,
-  min.len = min.len,
-  dis.merge = dis.merge,
   cl = cl
 )
 
-# Save the result
-saveRDS(result, file.path(base_dir, sprintf(
-  "delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
-), "dml_results.rds"))
-
-# Stop the cluster
 stopCluster(cl)
 
 # Result Summary
@@ -599,17 +453,10 @@ flog.info("Analysis Results Summary:")
 flog.info(sprintf("Total DMLs found: %d", nrow(result)))
 flog.info(sprintf("Hypomethylated DMLs in tumor: %d", sum(result$hypo_in_tumour)))
 flog.info(sprintf("Hypermethylated DMLs in tumor: %d", sum(!result$hypo_in_tumour)))
-
-# Calculate mean methylation difference
 mean_diff <- mean(result$diff.meth)
 flog.info(sprintf("Mean methylation difference: %.4f", mean_diff))
-
-# Calculate median methylation difference
 median_diff <- median(result$diff.meth)
 flog.info(sprintf("Median methylation difference: %.4f", median_diff))
-
 end_time <- Sys.time()
 flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
-
-# Restore warning level at the end of the script
 options(warn = 0)
