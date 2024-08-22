@@ -47,13 +47,22 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
   for (i in 1:nrow(top_hypo_dmls)) {
     dml <- top_hypo_dmls[i, ]
+    # Debug: Print the DML being processed
+    print(sprintf("Processing DML: chr = %s, pos = %d", dml$chr, dml$pos))
     # Find matching positions and log if no match is found
     matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
+    # Debug: Print the matching indices
+    print(sprintf("Matching indices found: %s", paste(matching_indices, collapse = ", ")))
     meth_levels <- methylation_data[matching_indices, ]
+    # Debug: Print the methylation levels
+    print("Methylation levels:")
+    print(meth_levels)
+
     if (is.null(meth_levels) || length(meth_levels) == 0) {
       flog.warn(sprintf("No valid methylation data found for DML at %s:%d", dml$chr, dml$pos), name = "dss_logger")
-      next
+      next # Skip this iteration if no data is found
     }
+    # Assign the methylation levels directly to plot_data
     plot_data[i, (names(meth_levels)) := as.list(meth_levels)]
   }
   # Melt the data for plotting
