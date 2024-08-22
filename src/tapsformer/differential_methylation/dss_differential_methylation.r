@@ -278,15 +278,30 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
       safe_plot(filename, function() {
         tryCatch(
           {
-            par(mfrow = c(n_samples, 1), mar = c(3, 3, 2, 1))
+            par(mfrow = c(n_samples, 1), mar = c(3, 4, 2, 2)) # Slightly adjusted margins
 
-            # Plot all samples in the BSseq object
-            for (j in 1:length(sample_names)) {
-              showOneDMR(dmr, bsseq = bsseq::subsetBySample(tumour_bsseq, sample_names[j]), ext = ext)
+            # Plot tumour samples
+            for (j in 1:ncol(tumour_bsseq)) {
+              sample_bsseq <- tumour_bsseq[, j, drop = FALSE] # Subset by column, keep as BSseq object
+              showOneDMR(dmr, sample_bsseq, ext = ext)
               title(
                 main = sprintf(
                   "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                  sample_names[j], i, dmr$chr, dmr$start, dmr$end,
+                  sampleNames(tumour_bsseq)[j], i, dmr$chr, dmr$start, dmr$end,
+                  dmr$hypomethylation_strength, dmr$areaStat
+                ),
+                cex.main = 0.9
+              )
+            }
+
+            # Plot control samples
+            for (j in 1:ncol(control_bsseq)) {
+              sample_bsseq <- control_bsseq[, j, drop = FALSE] # Subset by column, keep as BSseq object
+              showOneDMR(dmr, sample_bsseq, ext = ext)
+              title(
+                main = sprintf(
+                  "%s - DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                  sampleNames(control_bsseq)[j], i, dmr$chr, dmr$start, dmr$end,
                   dmr$hypomethylation_strength, dmr$areaStat
                 ),
                 cex.main = 0.9
@@ -305,6 +320,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
     flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
   }
+
 
 
   # Check BSseq object structure
