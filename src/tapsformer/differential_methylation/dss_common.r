@@ -207,6 +207,11 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
         )
     )
 
+    if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
+        dmx_dt[, start := pos]
+        dmx_dt[, end := pos + 2]
+    }
+
     # Add cumulative position
     chr_sizes$cumpos <- cumsum(as.numeric(chr_sizes$size))
     chr_sizes$pos <- chr_sizes$cumpos - chr_sizes$size / 2
@@ -256,6 +261,11 @@ create_manhattan_plot <- function(dmx_dt, output_dir) {
             156040895, 57227415
         )
     )
+
+    if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
+        dmx_dt[, start := pos]
+        dmx_dt[, end := pos + 2]
+    }
 
     # Add cumulative position
     chr_sizes$cumpos <- cumsum(as.numeric(chr_sizes$size))
@@ -312,6 +322,10 @@ create_qq_plot <- function(dmx_dt, output_dir) {
 # Pie chart of genomic context of differentially methylated regions/loci
 create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
     flog.info("Annotating regions with genomic context", name = "dss_logger")
+    if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
+        dmx_dt[, start := pos]
+        dmx_dt[, end := pos + 2]
+    }
 
     # Convert DMR/DML data to GRanges object
     dmx_gr <- GRanges(
