@@ -98,19 +98,19 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
-  setorder(top_hypo_dmls, -areaStat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmls, output_dir, flog)
+  setorder(top_hypo_dmls, -stat)
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmls, "stat", output_dir, flog)
 
   # Tag differential methylation strength by quantile of areaStat
   top_hypo_dmls[, hypomethylation_strength := case_when(
-    areaStat < thresholds$very_strong ~ "Very Strong",
-    areaStat < thresholds$strong ~ "Strong",
-    areaStat < thresholds$moderate ~ "Moderate",
+    stat < thresholds$very_strong ~ "Very Strong",
+    stat < thresholds$strong ~ "Strong",
+    stat < thresholds$moderate ~ "Moderate",
     TRUE ~ "Weak"
   )]
 
   # Save output
-  fwrite(top_hypo_dmls[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
+  fwrite(top_hypo_dmls[, .(chr, start, end, stat, pval, fdr, hypomethylation_strength)],
     file.path(output_dir, "hypomethylated_dmls.bed"),
     sep = "\t"
   )
@@ -118,13 +118,12 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   flog.info("Creating visualizations")
   strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$areaStat), ], 12)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
-  create_volcano_plot(dml_dt, output_dir, flog)
-  create_methylation_diff_plot(dml_dt, output_dir, flog)
-  create_chromosome_coverage_plot(dml_dt, output_dir, flog)
+  create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir, flog)
+  create_methylation_diff_plot(dml_dt, diff_col = "diff", output_dir, flog)
+  create_chromosome_coverage_plot(dml_dt, diff_col = "diff", output_dir, flog)
   create_manhattan_plot(dml_dt, output_dir, flog)
   create_qq_plot(dml_dt, output_dir, flog)
-  create_genomic_context_visualization(dmr_dt, output_dir, flog)
-
+  create_genomic_context_visualization(dml_dt, diff_col = "diff", output_dir, flog)
   flog.info("Analysis complete")
   return(dml_dt)
 }

@@ -58,26 +58,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext
       i, dmr$chr, dmr$start, dmr$end
     ))
 
-    safe_plot(filename, function() {
-      tryCatch(
-        {
-          par(mar = c(5, 4, 4, 2) + 0.1)
-          showOneDMR(dmr, combined_bsseq, ext = ext)
-          title(
-            main = sprintf(
-              "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-              i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-            ),
-            cex.main = 0.8
-          )
-        },
-        error = function(e) {
-          flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
-          plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
-          text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
-        }
-      )
-    }, flog, width = 14, height = 12)
+    plot_single_dmr(filename, dmr, combined_bsseq, i, ext, flog)
   }
 
   flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
@@ -128,7 +109,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # select top hypomethylated DMLs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmrs, -areaStat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, output_dir, flog)
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir, flog)
 
   # tag differential methylation strength by quantile of areastat
   top_hypo_dmrs[, hypomethylation_strength := case_when(
@@ -147,13 +128,13 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Visualizations
   flog.info("Creating visualizations")
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
-  create_volcano_plot(dmr_dt, output_dir, flog)
-  create_methylation_diff_plot(dmr_dt, output_dir, flog)
+  create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir, flog)
+  create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir, flog)
+  create_chromosome_coverage_plot(dmr_dt, diff_col = "diff.Methy", output_dir, flog)
   create_dmr_length_plot(dmr_dt, output_dir, flog)
   create_manhattan_plot(dmr_dt, output_dir, flog)
   create_qq_plot(dmr_dt, output_dir, flog)
-  create_genomic_context_visualization(dmr_dt, output_dir, flog)
-
+  create_genomic_context_visualization(dmr_dt, diff_col = "diff.Methy", output_dir, flog)
   flog.info("Analysis complete")
   return(dmr_dt)
 }

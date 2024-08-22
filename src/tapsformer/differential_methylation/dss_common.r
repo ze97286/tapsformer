@@ -37,7 +37,7 @@ suppressMessages(library(org.Hs.eg.db))
 suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
-# setup function for safe saving of svg plots to the output dir
+# Setup function for safe saving of svg plots to the output dir
 safe_plot <- function(filename, plot_func, logger, width = 10, height = 8) {
     tryCatch(
         {
@@ -53,6 +53,7 @@ safe_plot <- function(filename, plot_func, logger, width = 10, height = 8) {
     )
 }
 
+# Load tumour/control samples data
 load_and_create_bsseq <- function(base_dir, prefix) {
     sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
     if (length(sample_files) == 0) {
@@ -74,7 +75,7 @@ load_and_create_bsseq <- function(base_dir, prefix) {
     return(combined_bsseq)
 }
 
-# load the combined bsseq data set with tumour and control samples.
+# Load the combined bsseq data set with tumour and control samples.
 load_and_combine_bsseq <- function(base_dir, tumour_prefix, control_prefix) {
     tumour_bsseq <- load_and_create_bsseq(base_dir, tumour_prefix)
     control_bsseq <- load_and_create_bsseq(base_dir, control_prefix)
@@ -83,15 +84,15 @@ load_and_combine_bsseq <- function(base_dir, tumour_prefix, control_prefix) {
 }
 
 # a function for tagging dmls based on area stat quantiles. Saves a histogram of DMLs and their strength tag.
-analyze_areastat_thresholds <- function(top_hypo_dmxs, output_dir, logger) {
-    quantiles <- quantile(top_hypo_dmxs$areaStat, probs = c(0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
+analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir, logger) {
+    quantiles <- quantile(top_hypo_dmxs[[column_name]], probs = c(0.25, 0.5, 0.75, 0.9, 0.95, 0.99))
     moderate_threshold <- quantiles["75%"]
     strong_threshold <- quantiles["90%"]
     very_strong_threshold <- quantiles["99%"]
     safe_plot(
-        file.path(output_dir, "areastat_distribution.svg"),
+        file.path(output_dir, paste0(column_name, "_distribution.svg")),
         function() {
-            p <- ggplot(top_hypo_dmxs, aes(x = areaStat)) +
+            p <- ggplot(top_hypo_dmxs, aes_string(x = column_name)) +
                 geom_histogram(bins = 50, fill = "skyblue", color = "black") +
                 geom_vline(
                     xintercept = c(moderate_threshold, strong_threshold, very_strong_threshold),
@@ -103,8 +104,8 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, output_dir, logger) {
                     color = c("green", "orange", "red"), hjust = 1, vjust = 2, angle = 90
                 ) +
                 labs(
-                    title = "Distribution of areaStat Values",
-                    x = "areaStat",
+                    title = paste("Distribution of", column_name, "Values"),
+                    x = column_name,
                     y = "Count"
                 ) +
                 theme_minimal()
@@ -118,21 +119,21 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, output_dir, logger) {
     ))
 }
 
-# volcano plot
-create_volcano_plot <- function(dmx_dt, output_dir, logger) {
-    if ("pval" %in% names(dmx_dt)) {
+# Volcano plot
+create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, logger) {
+    if (pval_col %in% names(dmx_dt)) {
         logger$info("Creating volcano plot")
         safe_plot(
             file.path(output_dir, "volcano_plot.svg"),
             function() {
-                plot <- ggplot(dmx_dt, aes(x = diff.Methy, y = -log10(pval))) +
+                plot <- ggplot(dmx_dt, aes_string(x = diff_col, y = paste0("-log10(", pval_col, ")"))) +
                     geom_point(aes(color = hypo_in_tumour)) +
                     scale_color_manual(
                         values = c("TRUE" = "blue", "FALSE" = "red"),
                         labels = c("TRUE" = "Hypomethylated in Tumor", "FALSE" = "Hypermethylated in Tumor")
                     ) +
                     labs(
-                        title = "Volcano plot of DMRs",
+                        title = "Volcano plot",
                         x = "Methylation Difference (Negative = Hypomethylation in Tumor)",
                         y = "-log10(p-value)",
                         color = "Methylation State"
@@ -143,17 +144,18 @@ create_volcano_plot <- function(dmx_dt, output_dir, logger) {
         )
         return(TRUE)
     } else {
-        logger$warn("Skipping volcano plot due to missing 'pval' column")
+        logger$warn("Skipping volcano plot due to missing p-value column")
         return(FALSE)
     }
 }
 
-create_methylation_diff_plot <- function(dmx_dt, output_dir, logger) {
+# Methylation difference distribution plot
+create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, logger) {
     logger$info("Creating methylation difference distribution plot")
     safe_plot(
         file.path(output_dir, "methylation_difference_distribution.svg"),
         function() {
-            plot <- ggplot(dmx_dt, aes(x = diff.Methy)) +
+            plot <- ggplot(dmx_dt, aes_string(x = diff_col)) +
                 geom_histogram(binwidth = 0.05, fill = "lightblue", color = "black") +
                 labs(
                     title = "Distribution of Methylation Differences",
@@ -187,7 +189,7 @@ create_dmr_length_plot <- function(dmx_dt, output_dir, logger) {
 }
 
 # dmx by chromosome plot
-create_chromosome_coverage_plot <- function(dmx_dt, output_dir, logger) {
+create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir, logger) {
     logger$info("Creating chromosome coverage plot")
 
     # Create a data frame with chromosome sizes
@@ -205,12 +207,12 @@ create_chromosome_coverage_plot <- function(dmx_dt, output_dir, logger) {
     chr_sizes$cumpos <- cumsum(as.numeric(chr_sizes$size))
     chr_sizes$pos <- chr_sizes$cumpos - chr_sizes$size / 2
 
-    # Add chromosome and cumulative position to DMR data
+    # Add chromosome and cumulative position to DMR/DML data
     dmx_dt$chr_num <- as.numeric(sub("chr", "", dmx_dt$chr))
     dmx_dt$cumpos <- dmx_dt$start + chr_sizes$cumpos[match(dmx_dt$chr, chr_sizes$chr)] - chr_sizes$size[match(dmx_dt$chr, chr_sizes$chr)]
 
     # Create the chromosome coverage plot
-    p <- ggplot(dmx_dt, aes(x = cumpos, y = diff.Methy, color = diff.Methy < 0)) +
+    p <- ggplot(dmx_dt, aes_string(x = "cumpos", y = diff_col, color = paste0(diff_col, " < 0"))) +
         geom_point(alpha = 0.5) +
         scale_color_manual(
             values = c("FALSE" = "red", "TRUE" = "blue"),
@@ -220,9 +222,9 @@ create_chromosome_coverage_plot <- function(dmx_dt, output_dir, logger) {
         scale_x_continuous(label = chr_sizes$chr, breaks = chr_sizes$pos) +
         labs(
             title = paste(
-                "DMRs across chromosomes\n",
-                "Hypomethylated:", sum(dmx_dt$diff.Methy < 0),
-                "Hypermethylated:", sum(dmx_dt$diff.Methy >= 0)
+                "Methylation differences across chromosomes\n",
+                "Hypomethylated:", sum(dmx_dt[[diff_col]] < 0),
+                "Hypermethylated:", sum(dmx_dt[[diff_col]] >= 0)
             ),
             x = "Chromosome",
             y = "Methylation Difference (Negative = Hypomethylation in Tumor)"
@@ -237,7 +239,7 @@ create_chromosome_coverage_plot <- function(dmx_dt, output_dir, logger) {
     return(TRUE) # Indicate success
 }
 
-# manhattan plot
+# Manhattan plot
 create_manhattan_plot <- function(dmx_dt, output_dir, logger) {
     logger("Creating Manhattan plot")
     safe_plot(
@@ -286,14 +288,15 @@ create_qq_plot <- function(dmx_dt, output_dir, logger) {
     )
 }
 
-create_genomic_context_visualization <- function(dmr_dt, output_dir, logger) {
-    logger$info("Annotating DMRs with genomic context")
+# Pie chart of genomic context of differentially methylated regions/loci
+create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, logger) {
+    logger$info("Annotating regions with genomic context")
 
-    # Convert DMR data to GRanges object
-    dmr_gr <- GRanges(
-        seqnames = dmr_dt$chr,
-        ranges = IRanges(start = dmr_dt$start, end = dmr_dt$end),
-        diff.Methy = dmr_dt$diff.Methy
+    # Convert DMR/DML data to GRanges object
+    dmx_gr <- GRanges(
+        seqnames = dmx_dt$chr,
+        ranges = IRanges(start = dmx_dt$start, end = dmx_dt$end),
+        diff = dmx_dt[[diff_col]]
     )
 
     # Get genomic features
@@ -301,7 +304,7 @@ create_genomic_context_visualization <- function(dmr_dt, output_dir, logger) {
 
     # Filter out non-standard chromosomes
     standard_chromosomes <- paste0("chr", c(1:22))
-    dmr_gr <- dmr_gr[seqnames(dmr_gr) %in% standard_chromosomes]
+    dmx_gr <- dmx_gr[seqnames(dmx_gr) %in% standard_chromosomes]
 
     promoters <- promoters(txdb)
     genes <- suppressWarnings(genes(txdb, single.strand.genes.only = TRUE))
@@ -314,13 +317,13 @@ create_genomic_context_visualization <- function(dmr_dt, output_dir, logger) {
     exons <- exons[seqnames(exons) %in% standard_chromosomes]
     introns <- introns[seqnames(introns) %in% standard_chromosomes]
 
-    # Annotate DMRs
-    dmr_annotation <- data.frame(
-        DMR = seq_along(dmr_gr),
-        Promoter = overlapsAny(dmr_gr, promoters),
-        Gene = overlapsAny(dmr_gr, genes),
-        Exon = overlapsAny(dmr_gr, exons),
-        Intron = overlapsAny(dmr_gr, introns)
+    # Annotate regions (DMRs/DMLs)
+    dmx_annotation <- data.frame(
+        Region = seq_along(dmx_gr),
+        Promoter = overlapsAny(dmx_gr, promoters),
+        Gene = overlapsAny(dmx_gr, genes),
+        Exon = overlapsAny(dmx_gr, exons),
+        Intron = overlapsAny(dmx_gr, introns)
     )
 
     tryCatch(
@@ -328,20 +331,20 @@ create_genomic_context_visualization <- function(dmr_dt, output_dir, logger) {
             ah <- AnnotationHub()
             enhancers <- ah[["AH46978"]] # GeneHancer enhancers for hg38
             enhancers <- enhancers[seqnames(enhancers) %in% standard_chromosomes]
-            dmr_annotation$Enhancer <- overlapsAny(dmr_gr, enhancers)
+            dmx_annotation$Enhancer <- overlapsAny(dmx_gr, enhancers)
         },
         error = function(e) {
             logger$warn("Failed to fetch enhancer data. Skipping enhancer annotation.")
-            dmr_annotation$Enhancer <- FALSE
+            dmx_annotation$Enhancer <- FALSE
         }
     )
 
     # Add annotation to original data
-    dmr_dt$genomic_context <- apply(dmr_annotation[, -1], 1, function(x) {
+    dmx_dt$genomic_context <- apply(dmx_annotation[, -1], 1, function(x) {
         paste(names(x)[x], collapse = ";")
     })
 
-    genomic_context_summary <- dmr_dt %>%
+    genomic_context_summary <- dmx_dt %>%
         tidyr::separate_rows(genomic_context, sep = ";") %>%
         dplyr::group_by(genomic_context) %>%
         dplyr::summarise(count = dplyr::n()) %>%
@@ -351,11 +354,34 @@ create_genomic_context_visualization <- function(dmr_dt, output_dir, logger) {
         geom_bar(stat = "identity", width = 1) +
         coord_polar("y", start = 0) +
         theme_void() +
-        labs(title = "Distribution of DMRs across Genomic Features")
+        labs(title = "Distribution of Regions across Genomic Features")
 
     safe_plot(file.path(output_dir, "genomic_context_distribution.svg"), function() {
         print(p)
     }, logger)
 
-    return(list(dmr_dt = dmr_dt, plot = p)) # Return updated dmr_dt and the plot
+    return(list(dmx_dt = dmx_dt, plot = p)) # Return updated dmx_dt and the plot
+}
+
+plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext, logger) {
+    safe_plot(filename, function() {
+        tryCatch(
+            {
+                par(mar = c(5, 4, 4, 2) + 0.1)
+                showOneDMR(dmr, combined_bsseq, ext = ext)
+                title(
+                    main = sprintf(
+                        "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+                    ),
+                    cex.main = 0.8
+                )
+            },
+            error = function(e) {
+                logger$error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
+                plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
+                text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
+            }
+        )
+    }, logger, width = 14, height = 12)
 }
