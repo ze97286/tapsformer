@@ -130,7 +130,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   # Visualizations
   flog.info("Creating visualizations", name = "dss_logger")
-  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 20)
   create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir)
   create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
   create_chromosome_coverage_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
