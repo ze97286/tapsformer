@@ -23,7 +23,7 @@ bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub"
 )
-cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
+cran_packages <- c("here", "data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -38,7 +38,7 @@ suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
 # setup function for safe saving of svg plots to the output dir
-safe_plot <- function(filename, plot_func,logger, width = 10, height = 8) {
+safe_plot <- function(filename, plot_func, logger, width = 10, height = 8) {
     tryCatch(
         {
             svglite::svglite(filename, width = width, height = height)
@@ -109,7 +109,7 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, output_dir, logger) {
                 ) +
                 theme_minimal()
             print(p)
-        },logger
+        }, logger
     )
     return(list(
         moderate = moderate_threshold,
@@ -287,75 +287,75 @@ create_qq_plot <- function(dmx_dt, output_dir, logger) {
 }
 
 create_genomic_context_visualization <- function(dmr_dt, output_dir, logger) {
-  logger$info("Annotating DMRs with genomic context")
+    logger$info("Annotating DMRs with genomic context")
 
-  # Convert DMR data to GRanges object
-  dmr_gr <- GRanges(
-    seqnames = dmr_dt$chr,
-    ranges = IRanges(start = dmr_dt$start, end = dmr_dt$end),
-    diff.Methy = dmr_dt$diff.Methy
-  )
+    # Convert DMR data to GRanges object
+    dmr_gr <- GRanges(
+        seqnames = dmr_dt$chr,
+        ranges = IRanges(start = dmr_dt$start, end = dmr_dt$end),
+        diff.Methy = dmr_dt$diff.Methy
+    )
 
-  # Get genomic features
-  txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+    # Get genomic features
+    txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
 
-  # Filter out non-standard chromosomes
-  standard_chromosomes <- paste0("chr", c(1:22))
-  dmr_gr <- dmr_gr[seqnames(dmr_gr) %in% standard_chromosomes]
+    # Filter out non-standard chromosomes
+    standard_chromosomes <- paste0("chr", c(1:22))
+    dmr_gr <- dmr_gr[seqnames(dmr_gr) %in% standard_chromosomes]
 
-  promoters <- promoters(txdb)
-  genes <- suppressWarnings(genes(txdb, single.strand.genes.only = TRUE))
-  exons <- exons(txdb)
-  introns <- gaps(exons)
+    promoters <- promoters(txdb)
+    genes <- suppressWarnings(genes(txdb, single.strand.genes.only = TRUE))
+    exons <- exons(txdb)
+    introns <- gaps(exons)
 
-  # Ensure all genomic features are on standard chromosomes
-  promoters <- promoters[seqnames(promoters) %in% standard_chromosomes]
-  genes <- genes[seqnames(genes) %in% standard_chromosomes]
-  exons <- exons[seqnames(exons) %in% standard_chromosomes]
-  introns <- introns[seqnames(introns) %in% standard_chromosomes]
+    # Ensure all genomic features are on standard chromosomes
+    promoters <- promoters[seqnames(promoters) %in% standard_chromosomes]
+    genes <- genes[seqnames(genes) %in% standard_chromosomes]
+    exons <- exons[seqnames(exons) %in% standard_chromosomes]
+    introns <- introns[seqnames(introns) %in% standard_chromosomes]
 
-  # Annotate DMRs
-  dmr_annotation <- data.frame(
-    DMR = seq_along(dmr_gr),
-    Promoter = overlapsAny(dmr_gr, promoters),
-    Gene = overlapsAny(dmr_gr, genes),
-    Exon = overlapsAny(dmr_gr, exons),
-    Intron = overlapsAny(dmr_gr, introns)
-  )
+    # Annotate DMRs
+    dmr_annotation <- data.frame(
+        DMR = seq_along(dmr_gr),
+        Promoter = overlapsAny(dmr_gr, promoters),
+        Gene = overlapsAny(dmr_gr, genes),
+        Exon = overlapsAny(dmr_gr, exons),
+        Intron = overlapsAny(dmr_gr, introns)
+    )
 
-  tryCatch(
-    {
-      ah <- AnnotationHub()
-      enhancers <- ah[["AH46978"]] # GeneHancer enhancers for hg38
-      enhancers <- enhancers[seqnames(enhancers) %in% standard_chromosomes]
-      dmr_annotation$Enhancer <- overlapsAny(dmr_gr, enhancers)
-    },
-    error = function(e) {
-      logger$warn("Failed to fetch enhancer data. Skipping enhancer annotation.")
-      dmr_annotation$Enhancer <- FALSE
-    }
-  )
+    tryCatch(
+        {
+            ah <- AnnotationHub()
+            enhancers <- ah[["AH46978"]] # GeneHancer enhancers for hg38
+            enhancers <- enhancers[seqnames(enhancers) %in% standard_chromosomes]
+            dmr_annotation$Enhancer <- overlapsAny(dmr_gr, enhancers)
+        },
+        error = function(e) {
+            logger$warn("Failed to fetch enhancer data. Skipping enhancer annotation.")
+            dmr_annotation$Enhancer <- FALSE
+        }
+    )
 
-  # Add annotation to original data
-  dmr_dt$genomic_context <- apply(dmr_annotation[, -1], 1, function(x) {
-    paste(names(x)[x], collapse = ";")
-  })
+    # Add annotation to original data
+    dmr_dt$genomic_context <- apply(dmr_annotation[, -1], 1, function(x) {
+        paste(names(x)[x], collapse = ";")
+    })
 
-  genomic_context_summary <- dmr_dt %>%
-    tidyr::separate_rows(genomic_context, sep = ";") %>%
-    dplyr::group_by(genomic_context) %>%
-    dplyr::summarise(count = dplyr::n()) %>%
-    dplyr::mutate(percentage = count / sum(count) * 100)
+    genomic_context_summary <- dmr_dt %>%
+        tidyr::separate_rows(genomic_context, sep = ";") %>%
+        dplyr::group_by(genomic_context) %>%
+        dplyr::summarise(count = dplyr::n()) %>%
+        dplyr::mutate(percentage = count / sum(count) * 100)
 
-  p <- ggplot(genomic_context_summary, aes(x = "", y = percentage, fill = genomic_context)) +
-    geom_bar(stat = "identity", width = 1) +
-    coord_polar("y", start = 0) +
-    theme_void() +
-    labs(title = "Distribution of DMRs across Genomic Features")
+    p <- ggplot(genomic_context_summary, aes(x = "", y = percentage, fill = genomic_context)) +
+        geom_bar(stat = "identity", width = 1) +
+        coord_polar("y", start = 0) +
+        theme_void() +
+        labs(title = "Distribution of DMRs across Genomic Features")
 
-  safe_plot(file.path(output_dir, "genomic_context_distribution.svg"), function() {
-    print(p)
-  }, logger)
+    safe_plot(file.path(output_dir, "genomic_context_distribution.svg"), function() {
+        print(p)
+    }, logger)
 
-  return(list(dmr_dt = dmr_dt, plot = p))  # Return updated dmr_dt and the plot
+    return(list(dmr_dt = dmr_dt, plot = p)) # Return updated dmr_dt and the plot
 }
