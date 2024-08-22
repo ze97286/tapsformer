@@ -107,7 +107,7 @@ load_and_create_bsseq <- function(base_dir, prefix) {
   # Create the BSseq objects for all samples
   bsseq_list <- lapply(sample_files, function(file_path) {
     sample_data <- readRDS(file_path)
-    sample_name <- gsub(paste0("^", prefix, "_"), "", gsub("\\.rds$", "", basename(file_path)))
+    sample_name <- gsub("\\.rds$", "", basename(file_path))  # Keep the full name including the prefix
     BSseq(
       chr = sample_data$chr,
       pos = sample_data$pos,
@@ -117,8 +117,9 @@ load_and_create_bsseq <- function(base_dir, prefix) {
     )
   })
 
-  # Combine all BSseq objects into one
-  combined_bsseq <- do.call(bsseq::combine, bsseq_list)
+  # Combine the list of BSseq objects into one BSseq object
+  combined_bsseq <- do.call(combineList, bsseq_list)
+
   return(combined_bsseq)
 }
 
