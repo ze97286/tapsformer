@@ -60,8 +60,12 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
     
     meth_levels <- methylation_data[matching_indices, ]
     
-    if (length(meth_levels) == 0) {
-      flog.warn(sprintf("No methylation data found for DML at %s:%d", dml$chr, dml$pos), name = "dss_logger")
+    # Debug: Print the methylation levels
+    print("Methylation levels:")
+    print(meth_levels)
+    
+    if (is.null(meth_levels) || length(meth_levels) == 0) {
+      flog.warn(sprintf("No valid methylation data found for DML at %s:%d", dml$chr, dml$pos), name = "dss_logger")
       next  # Skip this iteration if no data is found
     }
     
@@ -93,6 +97,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   
   return(output_filename)
 }
+
 
 # this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
 # saving the output and visualisations.
