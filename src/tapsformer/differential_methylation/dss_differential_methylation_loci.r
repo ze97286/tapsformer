@@ -115,7 +115,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   str(top_hypo_dmls)
 
   # Save output
-  fwrite(top_hypo_dmls[, .(chr, start, end, stat, pval, fdr, hypomethylation_strength)],
+  fwrite(top_hypo_dmls[, .(chr, pos, pos+2, stat, pval, fdr, hypomethylation_strength)],
     file.path(output_dir, "hypomethylated_dmls.bed"),
     sep = "\t"
   )
