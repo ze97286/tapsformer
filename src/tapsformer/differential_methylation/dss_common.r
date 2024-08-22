@@ -23,7 +23,7 @@ bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub"
 )
-cran_packages <- c("here", "data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
+cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -44,11 +44,11 @@ safe_plot <- function(filename, plot_func, logger, width = 10, height = 8) {
             svglite::svglite(filename, width = width, height = height)
             plot_func()
             dev.off()
-            logger.info(paste("Plot saved as", filename))
+            logger$info(paste("Plot saved as", filename))
         },
         error = function(e) {
             if (dev.cur() > 1) dev.off() # Close device if open
-            logger.error(paste("Error creating plot:", filename, "-", conditionMessage(e)))
+            logger$error(paste("Error creating plot:", filename, "-", conditionMessage(e)))
         }
     )
 }

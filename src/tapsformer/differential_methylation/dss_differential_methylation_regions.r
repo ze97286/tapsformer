@@ -61,14 +61,14 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext
     safe_plot(filename, function() {
       tryCatch(
         {
-          par(mar = c(5, 4, 4, 2) + 0.1) 
+          par(mar = c(5, 4, 4, 2) + 0.1)
           showOneDMR(dmr, combined_bsseq, ext = ext)
           title(
             main = sprintf(
               "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
               i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
             ),
-            cex.main = 0.8 
+            cex.main = 0.8
           )
         },
         error = function(e) {
@@ -153,7 +153,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   create_manhattan_plot(dmr_dt, output_dir, flog)
   create_qq_plot(dmr_dt, output_dir, flog)
   create_genomic_context_visualization(dmr_dt, output_dir, flog)
-  
+
   flog.info("Analysis complete")
   return(dmr_dt)
 }
