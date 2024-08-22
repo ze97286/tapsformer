@@ -43,33 +43,58 @@ gc()
 
 # generate a plot of top DMLs and their methylation levels in each sample
 plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
+  # Get the raw methylation data
   methylation_data <- getMeth(combined_bsseq, type = "raw")
   plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
+
   for (i in 1:nrow(top_hypo_dmls)) {
     dml <- top_hypo_dmls[i, ]
-    # Debug: Print the DML being processed
+
+    # Debug: Log the DML being processed
     print(sprintf("Processing DML: chr = %s, pos = %d", dml$chr, dml$pos))
-    # Find matching positions and log if no match is found
+
+    # Find the corresponding methylation levels
     matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
-    # Debug: Print the matching indices
+
+    # Debug: Check matching indices
     print(sprintf("Matching indices found: %s", paste(matching_indices, collapse = ", ")))
+
+    # Extract the methylation levels for this DML
     meth_levels <- methylation_data[matching_indices, ]
-    # Debug: Print the methylation levels
+
+    # Debug: Log the methylation levels
     print("Methylation levels:")
     print(meth_levels)
 
     if (is.null(meth_levels) || length(meth_levels) == 0) {
       flog.warn(sprintf("No valid methylation data found for DML at %s:%d", dml$chr, dml$pos), name = "dss_logger")
-      next # Skip this iteration if no data is found
+      next # Skip to the next DML if no data is found
     }
-    # Assign the methylation levels directly to plot_data
-    plot_data[i, (names(meth_levels)) := as.list(meth_levels)]
+
+    # Add methylation levels to plot_data
+    plot_data[i, (paste0("Sample_", 1:ncol(meth_levels))) := as.list(meth_levels)]
   }
+
+  # Debug: Check plot_data
+  print("Plot data before melting:")
+  print(head(plot_data))
+
   # Melt the data for plotting
   plot_data <- melt(plot_data,
     id.vars = c("chr", "pos"),
     variable.name = "Sample", value.name = "MethylationLevel"
   )
+
+  # Debug: Check plot_data after melting
+  print("Plot data after melting:")
+  print(head(plot_data))
+
+  # Check if plot_data is empty
+  if (nrow(plot_data) == 0) {
+    flog.error("Plot data is empty after processing. No plot will be generated.", name = "dss_logger")
+    return(NULL)
+  }
+
   # Plot function
   plot_func <- function() {
     ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
@@ -82,9 +107,13 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       ) +
       theme(axis.text.x = element_text(angle = 90, hjust = 1))
   }
-  # Save the plot
+
+  # Save the plot with safe_plot
   output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
   safe_plot(output_filename, plot_func, width = 10, height = 8)
+
+  flog.info(sprintf("Plot saved as: %s", output_filename), name = "dss_logger")
+
   return(output_filename)
 }
 
