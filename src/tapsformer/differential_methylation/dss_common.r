@@ -37,6 +37,11 @@ suppressMessages(library(org.Hs.eg.db))
 suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
+
+test_logging <- function(logger) {
+    logger$info("This is a test log message.")
+}
+
 # Setup function for safe saving of svg plots to the output dir
 safe_plot <- function(filename, plot_func, logger, width = 10, height = 8) {
     tryCatch(

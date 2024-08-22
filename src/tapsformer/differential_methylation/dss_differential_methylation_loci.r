@@ -34,6 +34,8 @@ log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dml_a
 flog.appender(appender.file(log_dir))
 flog.info("Starting DSS DML analysis")
 
+test_logging(flog)
+
 # data loading
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
 gc()
