@@ -3,8 +3,7 @@
 
 start_time <- Sys.time()
 
-library(here)
-source(here("src", "tapsformer", "differential_methylation", "dss_common.r"))
+source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)

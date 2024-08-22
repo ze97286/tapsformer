@@ -1,10 +1,9 @@
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.4 0.05 0.01 raw
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.4 0.05 0.01 raw_with_liver
+# git pull;clear;Rscript dss_differential_methylation.r 0.4 0.05 0.01 raw
+# git pull;clear;Rscript dss_differential_methylation.r 0.4 0.05 0.01 raw_with_liver
 
 start_time <- Sys.time()
 
-library(here)
-source(here("src", "tapsformer", "differential_methylation", "dss_common.r"))
+source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
