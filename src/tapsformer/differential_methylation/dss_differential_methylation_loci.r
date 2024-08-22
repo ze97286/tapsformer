@@ -32,6 +32,13 @@ log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dml_a
 
 # set up logging
 flog.logger("dss_logger", appender.file(log_dir))
+flog.threshold(INFO, name = "dss_logger")
+flog.threshold(WARN, name = "dss_logger")
+flog.threshold(ERROR, name = "dss_logger")
+flog.info("This is an INFO message.", name = "myLogger")
+flog.warn("This is a WARN message.", name = "myLogger")
+flog.error("This is an ERROR message.", name = "myLogger")
+
 flog.info("Starting DSS DML analysis", name = "dss_logger")
 
 # data loading
