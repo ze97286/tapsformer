@@ -419,13 +419,14 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
         cex_main <- 0.8
     }
 
-    # Dynamically adjust plot height based on the number of samples
+    # Dynamically adjust plot dimensions based on the number of samples
     plot_height <- max(12, (num_tumor + num_control) * 0.6)
+    plot_width <- max(16, (num_tumor + num_control) * 0.8)
 
     safe_plot(filename, function() {
         tryCatch(
             {
-                par(mfrow = c(1, 2))  # Set up a 1x2 plot layout
+                par(mfrow = c(1, 2)) # Set up a 1x2 plot layout
 
                 # Plot for tumor samples
                 par(mar = mar)
@@ -457,6 +458,5 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
                 text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
             }
         )
-    }, width = plot_width, height = plot_height)  
+    }, width = plot_width, height = plot_height)
 }
-
