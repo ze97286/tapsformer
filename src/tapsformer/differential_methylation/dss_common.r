@@ -246,6 +246,21 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
 # Manhattan plot
 create_manhattan_plot <- function(dmx_dt, output_dir) {
     flog.info("Creating Manhattan plot", name = "dss_logger")
+    # Create a data frame with chromosome sizes
+    chr_sizes <- data.frame(
+        chr = paste0("chr", c(1:22, "X", "Y")),
+        size = c(
+            248956422, 242193529, 198295559, 190214555, 181538259, 170805979, 159345973,
+            145138636, 138394717, 133797422, 135086622, 133275309, 114364328, 107043718,
+            101991189, 90338345, 83257441, 80373285, 58617616, 64444167, 46709983, 50818468,
+            156040895, 57227415
+        )
+    )
+
+    # Add cumulative position
+    chr_sizes$cumpos <- cumsum(as.numeric(chr_sizes$size))
+    chr_sizes$pos <- chr_sizes$cumpos - chr_sizes$size / 2
+
     safe_plot(
         file.path(output_dir, "manhattan_plot.svg"),
         function() {
@@ -368,17 +383,39 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
+    # Determine the number of samples in the combined_bsseq object
+    num_samples <- length(sampleNames(combined_bsseq))
+
+    # Adjust margins and text size based on the number of samples
+    if (num_samples > 20) {
+        mar <- c(4, 4, 2, 2) + 0.1 # Smaller margins for larger sample sizes
+        cex_main <- 0.6 # Smaller text for large sample sizes
+        plot_width <- 20
+        plot_height <- 14
+    } else if (num_samples > 10) {
+        mar <- c(5, 4, 3, 2) + 0.1
+        cex_main <- 0.7
+        plot_width <- 18
+        plot_height <- 12
+    } else {
+        mar <- c(7, 4, 4, 2) + 0.1 # Larger margins for fewer samples
+        cex_main <- 0.8
+        plot_width <- 16
+        plot_height <- 12
+    }
+
     safe_plot(filename, function() {
         tryCatch(
             {
-                par(mar = c(5, 4, 4, 2) + 0.1)
+                par(mar = mar)
                 showOneDMR(dmr, combined_bsseq, ext = ext)
                 title(
                     main = sprintf(
                         "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
                         i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
                     ),
-                    cex.main = 0.8
+                    cex.main = cex_main,
+                    line = 2
                 )
             },
             error = function(e) {
@@ -387,5 +424,5 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
                 text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
             }
         )
-    }, width = 14, height = 12)
+    }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
 }
