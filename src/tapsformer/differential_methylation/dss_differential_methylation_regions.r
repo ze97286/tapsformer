@@ -187,7 +187,7 @@ analyze_areastat_thresholds <- function(top_hypo_dmrs, output_dir) {
 
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl) {
   output_dir <- file.path(base_dir, sprintf(
-    "delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
+    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
     delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
