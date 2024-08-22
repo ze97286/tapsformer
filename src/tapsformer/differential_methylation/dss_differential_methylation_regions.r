@@ -92,7 +92,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  flog.info("Performing DML test")
+  flog.info("Performing DMR test")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
@@ -128,7 +128,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # select top hypomethylated DMLs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmrs, -areaStat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, output_dir)
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, output_dir, flog)
 
   # tag differential methylation strength by quantile of areastat
   top_hypo_dmrs[, hypomethylation_strength := case_when(

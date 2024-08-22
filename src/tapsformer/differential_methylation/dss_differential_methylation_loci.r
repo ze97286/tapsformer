@@ -32,7 +32,7 @@ log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dml_a
 
 # set up logging
 flog.appender(appender.file(log_dir))
-flog.info("Starting optimized DSS DML analysis")
+flog.info("Starting DSS DML analysis")
 
 # data loading
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
@@ -88,22 +88,20 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     p.threshold = p.threshold
   )
 
-  # FDR correction manually to the p-values
-  dmls$fdr <- p.adjust(dmls$pval, method = "BH")
   dml_dt <- as.data.table(dmls)
 
   # identify hypomethylated regions in the tumour and check significance
   dml_dt[, `:=`(
-    hypo_in_tumour = diff.meth < 0,
+    hypo_in_tumour = diff < 0,
     significant_after_fdr = fdr < fdr.threshold
   )]
 
-  # select top hypomethylated DMLs
+  # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
   setorder(top_hypo_dmls, -areaStat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmls, output_dir)
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmls, output_dir, flog)
 
-  # tag differential methylation strength by quantile of areastat
+  # Tag differential methylation strength by quantile of areaStat
   top_hypo_dmls[, hypomethylation_strength := case_when(
     areaStat < thresholds$very_strong ~ "Very Strong",
     areaStat < thresholds$strong ~ "Strong",
@@ -111,7 +109,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     TRUE ~ "Weak"
   )]
 
-  # save output
+  # Save output
   fwrite(top_hypo_dmls[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
     file.path(output_dir, "hypomethylated_dmls.bed"),
     sep = "\t"
@@ -126,7 +124,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   create_manhattan_plot(dml_dt, output_dir, flog)
   create_qq_plot(dml_dt, output_dir, flog)
   create_genomic_context_visualization(dmr_dt, output_dir, flog)
-  
+
   flog.info("Analysis complete")
   return(dml_dt)
 }
