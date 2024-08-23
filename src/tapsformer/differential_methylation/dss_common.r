@@ -403,9 +403,13 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     tumor_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
     control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
+    # Ensure the samples exist in the combined_bsseq object
+    tumor_indices <- which(sampleNames(combined_bsseq) %in% tumor_samples)
+    control_indices <- which(sampleNames(combined_bsseq) %in% control_samples)
+
     # Determine the number of samples
-    num_tumor <- length(tumor_samples)
-    num_control <- length(control_samples)
+    num_tumor <- length(tumor_indices)
+    num_control <- length(control_indices)
 
     # Adjust margins and text size based on the number of samples
     if (num_tumor + num_control > 20) {
@@ -430,27 +434,35 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
 
                 # Plot for tumor samples
                 par(mar = mar)
-                showOneDMR(dmr, combined_bsseq[tumor_samples], ext = ext)
-                title(
-                    main = sprintf(
-                        "Tumor Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-                    ),
-                    cex.main = cex_main,
-                    line = 2
-                )
+                if (num_tumor > 0) {
+                    showOneDMR(dmr, combined_bsseq[, tumor_indices], ext = ext)
+                    title(
+                        main = sprintf(
+                            "Tumor Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+                        ),
+                        cex.main = cex_main,
+                        line = 2
+                    )
+                } else {
+                    plot(1, type = "n", xlab = "", ylab = "", main = "No Tumor Samples Available")
+                }
 
                 # Plot for control samples
                 par(mar = mar)
-                showOneDMR(dmr, combined_bsseq[control_samples], ext = ext)
-                title(
-                    main = sprintf(
-                        "Control Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-                    ),
-                    cex.main = cex_main,
-                    line = 2
-                )
+                if (num_control > 0) {
+                    showOneDMR(dmr, combined_bsseq[, control_indices], ext = ext)
+                    title(
+                        main = sprintf(
+                            "Control Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+                        ),
+                        cex.main = cex_main,
+                        line = 2
+                    )
+                } else {
+                    plot(1, type = "n", xlab = "", ylab = "", main = "No Control Samples Available")
+                }
             },
             error = function(e) {
                 flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)), name = "dss_logger")
