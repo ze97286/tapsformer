@@ -79,12 +79,21 @@ load_and_create_bsseq <- function(base_dir, prefix) {
     return(combined_bsseq)
 }
 
+min_coverage_threshold <- function(group_samples) {
+    return(max(floor(length(group_samples) / 2), 2))
+}
+
 # Load the combined bsseq data set with tumour and control samples.
 load_and_combine_bsseq <- function(base_dir, tumour_prefix, control_prefix) {
     tumour_bsseq <- load_and_create_bsseq(base_dir, tumour_prefix)
     control_bsseq <- load_and_create_bsseq(base_dir, control_prefix)
     combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
-    return(combined_bsseq)
+    coverage_matrix <- getCoverage(combined_bsseq)
+    control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+    threshold <- min_coverage_threshold(control_samples)
+    loci_to_keep <- rowSums(coverage_matrix >= 1) >= threshold
+    filtered_bsseq <- combined_bsseq[loci_to_keep, ]
+    return(filtered_bsseq)
 }
 
 # a function for tagging dmls based on area stat quantiles. Saves a histogram of DMLs and their strength tag.
