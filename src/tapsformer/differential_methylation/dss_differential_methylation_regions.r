@@ -7,7 +7,7 @@ source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 7) {
+if (length(args) != 8) {
   stop("Usage: Rscript dmr_analysis.R <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge>")
 }
 delta <- as.numeric(args[1])
@@ -16,7 +16,12 @@ fdr.threshold <- as.numeric(args[3])
 min.CpG <- as.numeric(args[4])
 min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
-suffix <- args[7]
+smoothing_arg <- tolower(args[7])  # Convert to lowercase for consistency
+smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false") FALSE else NA
+if (is.na(smoothing)) {
+  stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
+}
+suffix <- args[8]
 
 # setup parallel processing
 library(parallel)
@@ -69,17 +74,18 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext
 
 # this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
 # saving the output and visualisations.
-perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl) {
+perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl) {
+  smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
-    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
-    delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
+    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
+    delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   flog.info("Performing DMR test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing, test = "BB")
 
   flog.info("Calling DMRs", name = "dss_logger")
   dmrs <- callDMR(
@@ -154,6 +160,7 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir,
   min.CpG = min.CpG,
   min.len = min.len,
   dis.merge = dis.merge,
+  smoothing = smoothing,
   cl = cl
 )
 

@@ -7,13 +7,19 @@ source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 4) {
-  stop("Usage: Rscript dml_analysis.R <delta> <p.threshold> <fdr.threshold> <suffix>")
+if (length(args) != 5) {
+  stop("Usage: Rscript dml_analysis.R <delta> <p.threshold> <fdr.threshold> <smoothing> <suffix>")
 }
 delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
 fdr.threshold <- as.numeric(args[3])
-suffix <- args[4]
+
+smoothing_arg <- tolower(args[4])  # Convert to lowercase for consistency
+smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false") FALSE else NA
+if (is.na(smoothing)) {
+  stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
+}
+suffix <- args[5]
 
 # setup parallel processing
 library(parallel)
@@ -88,23 +94,23 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   tryCatch(
     {
       # Open a new svg device with larger size
-      svglite::svglite(output_filename, width = 15, height = 10)  # Adjust width and height for larger rectangles
+      svglite::svglite(output_filename, width = 15, height = 10) # Adjust width and height for larger rectangles
 
       # Generate the plot
       plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
         geom_point(size = 2) +
-        facet_wrap(~ chr + pos, scales = "free_y", ncol = 10) +  # Set grid layout to 10 columns
+        facet_wrap(~ chr + pos, scales = "free_y", ncol = 10) + # Set grid layout to 10 columns
         theme_bw() +
         labs(
           title = "Methylation Levels Across Samples for Each DML",
           x = "Sample", y = "Methylation Level"
         ) +
-        scale_shape_manual(values = c(Tumour = 16, Control = 1)) +  # Full circle for Tumour, open circle for Control
-        scale_color_manual(values = c(Tumour = "blue", Control = "red")) +  # Blue for Tumour, Red for Control
+        scale_shape_manual(values = c(Tumour = 16, Control = 1)) + # Full circle for Tumour, open circle for Control
+        scale_color_manual(values = c(Tumour = "blue", Control = "red")) + # Blue for Tumour, Red for Control
         theme(
           axis.text.x = element_text(angle = 90, hjust = 1),
-          strip.text = element_text(size = 12),  # Increase strip text size for readability
-          plot.margin = unit(c(1, 1, 1, 1), "cm")  # Adjust margins if needed
+          strip.text = element_text(size = 12), # Increase strip text size for readability
+          plot.margin = unit(c(1, 1, 1, 1), "cm") # Adjust margins if needed
         )
 
       print(plot) # Ensure the plot is rendered
@@ -123,38 +129,57 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   return(output_filename)
 }
 
+sliding_window_filter <- function(dmls, window_size) {
+  dmls[, window := cut(pos, breaks = seq(min(pos), max(pos) + window_size, by = window_size))]
+  windowed_dmls <- dmls[, .(
+    mean_diff = mean(diff),
+    mean_pval = mean(pval),
+    n_dmls = .N
+  ), by = .(chr, window)]
 
+  significant_windows <- windowed_dmls[abs(mean_diff) >= delta & mean_pval < p.threshold & n_dmls >= 3]
+  dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
+}
 
 # this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
 # saving the output and visualisations.
-perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, cl) {
+perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min_coverage, window_size, smoothing, cl) {
+  smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
-    "dml_delta_%.2f_p_%.4f_fdr_%.2f",
-    delta, p.threshold, fdr.threshold
+    "dml_delta_%.2f_p_%.4f_fdr_%.2f_%s",
+    delta, p.threshold, fdr.threshold, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   flog.info("Performing DML test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing, test = "BB")
 
   flog.info("Calling DMLs", name = "dss_logger")
-  dmls <- callDML(dml_test,
-    delta = delta,
-    p.threshold = p.threshold
-  )
+  dmls <- callDML(dml_test, delta = delta, p.threshold = p.threshold)
 
   dml_dt <- as.data.table(dmls)
 
   # identify hypomethylated regions in the tumour and check significance
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
-    significant_after_fdr = fdr < fdr.threshold
+    significant_after_fdr = fdr < fdr.threshold,
+    mean_methylation_diff = abs(diff),
+    methylation_variance_ratio = pmax(var1, var2) / pmin(var1, var2),
+    coverage = pmin(n1, n2)
   )]
 
   # Select top hypomethylated DMLs
-  top_hypo_dmls <- dml_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
+  top_hypo_dmls <- dml_dt[
+    hypo_in_tumour == TRUE &
+      significant_after_fdr == TRUE &
+      mean_methylation_diff >= delta &
+      methylation_variance_ratio <= 2 &
+      coverage >= min_coverage
+  ]
+
+  top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size)
   setorder(top_hypo_dmls, -stat)
   thresholds <- analyze_areastat_thresholds(top_hypo_dmls, "stat", output_dir)
 
@@ -191,10 +216,15 @@ flog.info(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f",
   delta, p.threshold, fdr.threshold
 ), name = "dss_logger")
-result <- perform_dml_analysis(combined_bsseq, base_dir,
+result <- perform_dml_analysis(
+  combined_bsseq,
+  base_dir,
   delta = delta,
+  smoothing = smoothing,
   p.threshold = p.threshold,
   fdr.threshold = fdr.threshold,
+  min_coverage = 10,
+  window_size = 500,
   cl = cl
 )
 
