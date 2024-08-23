@@ -90,8 +90,10 @@ load_and_combine_bsseq <- function(base_dir, tumour_prefix, control_prefix) {
     combined_bsseq <- bsseq::combine(tumour_bsseq, control_bsseq)
     coverage_matrix <- getCoverage(combined_bsseq)
     control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+    tumour_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
     threshold <- min_coverage_threshold(control_samples)
-    loci_to_keep <- rowSums(coverage_matrix >= 1) >= threshold
+    loci_to_keep <- rowSums(coverage_matrix[, tumour_samples] >= 1) >= threshold &
+        rowSums(coverage_matrix[, control_samples] >= 1) >= threshold
     filtered_bsseq <- combined_bsseq[loci_to_keep, ]
     return(filtered_bsseq)
 }
