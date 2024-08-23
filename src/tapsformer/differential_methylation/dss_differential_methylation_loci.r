@@ -1,6 +1,6 @@
-# this script aims to identify differential methylation loci between tumour tissue and healthy control cfDNA. 
-# the main output is a bed file of positions of tumour hypomethylated loci. 
-# in addition it generated a number of visualisations for analysis. 
+# this script aims to identify differential methylation loci between tumour tissue and healthy control cfDNA.
+# the main output is a bed file of positions of tumour hypomethylated loci.
+# in addition it generated a number of visualisations for analysis.
 
 start_time <- Sys.time()
 
@@ -15,7 +15,7 @@ delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
 fdr.threshold <- as.numeric(args[3])
 
-smoothing_arg <- tolower(args[4])  # Convert to lowercase for consistency
+smoothing_arg <- tolower(args[4])
 smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false") FALSE else NA
 if (is.na(smoothing)) {
   stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
@@ -156,7 +156,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # run the dml test with smoothing (TRUE/FALSE). 
+  # run the dml test with smoothing (TRUE/FALSE).
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
 
   flog.info("Calling DMLs", name = "dss_logger")
@@ -166,22 +166,29 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   dml_dt <- as.data.table(dmls)
 
+  z_score <- qnorm(0.975) # Two-tailed 95% CI
+
   # identify hypomethylated loci in the tumour and check significance
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
     significant_after_fdr = fdr < fdr.threshold,
     mean_methylation_diff = abs(diff),
+    lower_ci = diff - (z_score * diff.se),
+    upper_ci = diff + (z_score * diff.se),
+    ci_excludes_zero = sign(lower_ci) == sign(upper_ci)
   )]
 
   # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[
     hypo_in_tumour == TRUE &
       significant_after_fdr == TRUE &
-      mean_methylation_diff >= delta      
+      mean_methylation_diff >= delta & 
+      ci_excludes_zero == TRUE
   ]
 
   top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size)
-  setorder(top_hypo_dmls, -stat)
+  top_hypo_dmls[, composite_score := (abs(stat) * abs(diff)) / (diff.se * sqrt(fdr))]
+  setorder(top_hypo_dmls, -composite_score)
   thresholds <- analyze_areastat_thresholds(top_hypo_dmls, "stat", output_dir)
 
   # Tag differential methylation strength by quantile of areaStat
