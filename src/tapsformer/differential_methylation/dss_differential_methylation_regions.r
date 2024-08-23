@@ -50,10 +50,15 @@ combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
 gc()
 
 # generate a plot of top DMRs and their methylation levels in each sample
-plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 0) {
+plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 0, smooth = TRUE) {
   dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
   dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
   strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
+
+  if (smooth) {
+    flog.info("Smoothing BSseq object for plotting...", name = "dss_logger")
+    combined_bsseq <- BSmooth(combined_bsseq, verbose = TRUE)
+  }
 
   for (i in 1:nrow(strongest_dmrs)) {
     dmr <- strongest_dmrs[i, ]
@@ -62,7 +67,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
-    plot_single_dmr_faceted(filename, dmr, combined_bsseq, i, ext)
+    plot_single_dmr_faceted(filename, dmr, combined_bsseq, i, ext, smooth)
   }
   flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n), name = "dss_logger")
 }
@@ -131,7 +136,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   # Visualizations
   flog.info("Creating visualizations", name = "dss_logger")
-  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 20)
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, smooth = smoothing)
   create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir)
   create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
   create_chromosome_coverage_plot(dmr_dt, diff_col = "diff.Methy", output_dir)

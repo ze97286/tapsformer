@@ -23,7 +23,7 @@ bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel"
 )
-cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap","grid","gridExtra")
+cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -454,14 +454,10 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
 }
 
-plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
+plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext, smooth = TRUE) {
     num_samples <- length(sampleNames(combined_bsseq))
-
-    # Determine grid layout
     ncol <- min(5, ceiling(sqrt(num_samples)))
     nrow <- ceiling(num_samples / ncol)
-
-    # Create a list to store individual sample plots
     plot_list <- list()
 
     for (sample in sampleNames(combined_bsseq)) {
@@ -473,7 +469,8 @@ plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
                         ranges = IRanges(start = dmr$start - ext, end = dmr$end + ext)
                     ),
                     extend = 0,
-                    main = sample
+                    main = sample,
+                    type = if (smooth) "smooth" else "raw" # Use 'raw' if not smoothed
                 )
             },
             error = function(e) {
@@ -485,20 +482,15 @@ plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
         plot_list[[sample]] <- p
     }
 
-    # Combine plots
     combined_plot <- do.call(gridExtra::grid.arrange, c(plot_list, ncol = ncol))
-
-    # Add overall title
-    title <- grid::textGrob(sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                                    i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
-                            gp = gpar(fontface = "bold"))
-    
-
-    final_plot <- gridExtra::grid.arrange(title, combined_plot,
-        heights = c(2, 30)
+    title <- grid::textGrob(
+        sprintf(
+            "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+        ),
+        gp = gpar(fontface = "bold")
     )
-
-    # Save plot
+    final_plot <- gridExtra::grid.arrange(title, combined_plot, heights = c(2, 30))
     ggsave(filename, final_plot, width = 20, height = 4 * nrow, limitsize = FALSE)
     flog.info(paste("Plot saved as", filename), name = "dss_logger")
 }
