@@ -174,20 +174,21 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     significant_after_fdr = fdr < fdr.threshold,
     mean_methylation_diff = abs(diff),
     lower_ci = diff - (z_score * diff.se),
-    upper_ci = diff + (z_score * diff.se),
-    ci_excludes_zero = sign(lower_ci) == sign(upper_ci)
+    upper_ci = diff + (z_score * diff.se)
   )]
+  dml_dt[, ci_excludes_zero := sign(lower_ci) == sign(upper_ci)]
 
   # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[
     hypo_in_tumour == TRUE &
       significant_after_fdr == TRUE &
-      mean_methylation_diff >= delta & 
+      mean_methylation_diff >= delta &
       ci_excludes_zero == TRUE
   ]
 
-  top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size)
+  top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size) 
   top_hypo_dmls[, composite_score := (abs(stat) * abs(diff)) / (diff.se * sqrt(fdr))]
+
   setorder(top_hypo_dmls, -composite_score)
   thresholds <- analyze_areastat_thresholds(top_hypo_dmls, "stat", output_dir)
 
