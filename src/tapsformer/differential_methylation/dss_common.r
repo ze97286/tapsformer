@@ -23,7 +23,7 @@ bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel"
 )
-cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "gridExtra")
+cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap","grid","gridExtra")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -489,10 +489,10 @@ plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
     combined_plot <- do.call(gridExtra::grid.arrange, c(plot_list, ncol = ncol))
 
     # Add overall title
-    title <- textGrob(sprintf(
-        "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-    ), gp = gpar(fontsize = 12, fontface = "bold"))
+    title <- grid::textGrob(sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                                    dmr_index, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
+                            gp = gpar(fontface = "bold"))
+    
 
     final_plot <- gridExtra::grid.arrange(title, combined_plot,
         heights = c(2, 30)
