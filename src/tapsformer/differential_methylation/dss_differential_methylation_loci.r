@@ -45,6 +45,7 @@ gc()
 plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   # Get the raw methylation data
   methylation_data <- getMeth(combined_bsseq, type = "raw")
+  sample_names <- colnames(methylation_data) # Get the actual sample names
   plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
 
   for (i in 1:nrow(top_hypo_dmls)) {
@@ -72,8 +73,8 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       next # Skip to the next DML if no valid data is found
     }
 
-    # Add methylation levels to plot_data
-    plot_data[i, (paste0("Sample_", 1:ncol(meth_levels))) := as.list(meth_levels)]
+    # Add methylation levels to plot_data with sample names as columns
+    plot_data[i, (sample_names) := as.list(meth_levels)]
   }
 
   # Debug: Check plot_data
@@ -132,7 +133,6 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 
   return(output_filename)
 }
-
 
 # this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
 # saving the output and visualisations.
