@@ -1,5 +1,6 @@
-# git pull;clear;Rscript dss_differential_methylation.r 0.4 0.05 0.01 raw
-# git pull;clear;Rscript dss_differential_methylation.r 0.4 0.05 0.01 raw_with_liver
+# this script aims to identify differential methylation loci between tumour tissue and healthy control cfDNA. 
+# the main output is a bed file of positions of tumour hypomethylated loci. 
+# in addition it generated a number of visualisations for analysis. 
 
 start_time <- Sys.time()
 
@@ -141,7 +142,7 @@ sliding_window_filter <- function(dmls, window_size) {
   dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
 }
 
-# this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
+# this is the core function here, doing the DML analysis choosing hypomethylated DMLs and
 # saving the output and visualisations.
 perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min_coverage, window_size, smoothing, cl) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
@@ -154,14 +155,19 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   flog.info("Performing DML test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing, test = "BB")
+
+  # run the dml test with smoothing (TRUE/FALSE). 
+  BPPARAM <- MulticoreParam(workers = 6)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing, BPPARAM = BPPARAM)
 
   flog.info("Calling DMLs", name = "dss_logger")
+
+  # identify DML given the delta and pvalue threshold.
   dmls <- callDML(dml_test, delta = delta, p.threshold = p.threshold)
 
   dml_dt <- as.data.table(dmls)
 
-  # identify hypomethylated regions in the tumour and check significance
+  # identify hypomethylated loci in the tumour and check significance
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
     significant_after_fdr = fdr < fdr.threshold,
