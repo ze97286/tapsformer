@@ -399,91 +399,46 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
-    # Split samples into tumor and control based on their names
-    tumor_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
-    control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-
-    # Ensure the samples exist in the combined_bsseq object
-    tumor_indices <- which(sampleNames(combined_bsseq) %in% tumor_samples)
-    control_indices <- which(sampleNames(combined_bsseq) %in% control_samples)
-
-    # Determine the number of samples
-    num_tumor <- length(tumor_indices)
-    num_control <- length(control_indices)
-
-    # Debug: Log the indices and dimensions
-    print(sprintf("Tumor indices: %s", paste(tumor_indices, collapse = ", ")))
-    print(sprintf("Control indices: %s", paste(control_indices, collapse = ", ")))
-
-    # Check the dimensions of the subsetted BSseq objects
-    if (num_tumor > 0) {
-        print(sprintf("Tumor BSseq dimensions: %s", paste(dim(combined_bsseq[, tumor_indices]), collapse = " x ")))
-    }
-    if (num_control > 0) {
-        print(sprintf("Control BSseq dimensions: %s", paste(dim(combined_bsseq[, control_indices]), collapse = " x ")))
-    }
+    # Determine the number of samples in the combined_bsseq object
+    num_samples <- length(sampleNames(combined_bsseq))
 
     # Adjust margins and text size based on the number of samples
-    if (num_tumor + num_control > 20) {
-        mar <- c(4, 4, 2, 2) + 0.1
-        cex_main <- 0.6
-    } else if (num_tumor + num_control > 10) {
+    if (num_samples > 20) {
+        mar <- c(4, 4, 2, 2) + 0.1 # Smaller margins for larger sample sizes
+        cex_main <- 0.6 # Smaller text for large sample sizes
+        plot_width <- 20
+        plot_height <- 14
+    } else if (num_samples > 10) {
         mar <- c(5, 4, 3, 2) + 0.1
         cex_main <- 0.7
+        plot_width <- 18
+        plot_height <- 12
     } else {
-        mar <- c(7, 4, 4, 2) + 0.1
+        mar <- c(7, 4, 4, 2) + 0.1 # Larger margins for fewer samples
         cex_main <- 0.8
+        plot_width <- 16
+        plot_height <- 12
     }
-
-    # Dynamically adjust plot dimensions based on the number of samples
-    plot_height <- max(12, (num_tumor + num_control) * 0.6)
-    plot_width <- max(16, (num_tumor + num_control) * 0.8)
 
     safe_plot(filename, function() {
         tryCatch(
             {
-                par(mfrow = c(1, 2)) # Set up a 1x2 plot layout
-
-                # Plot for tumor samples
                 par(mar = mar)
-                if (num_tumor > 0) {
-                    print("Plotting tumor samples...") # Debugging statement
-                    showOneDMR(dmr, combined_bsseq[, tumor_indices], ext = ext)
-                    title(
-                        main = sprintf(
-                            "Tumor Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-                        ),
-                        cex.main = cex_main,
-                        line = 2
-                    )
-                } else {
-                    plot(1, type = "n", xlab = "", ylab = "", main = "No Tumor Samples Available")
-                }
-
-                # Plot for control samples
-                par(mar = mar)
-                if (num_control > 0) {
-                    print("Plotting control samples...") # Debugging statement
-                    showOneDMR(dmr, combined_bsseq[, control_indices], ext = ext)
-                    title(
-                        main = sprintf(
-                            "Control Samples\nDMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-                        ),
-                        cex.main = cex_main,
-                        line = 2
-                    )
-                } else {
-                    plot(1, type = "n", xlab = "", ylab = "", main = "No Control Samples Available")
-                }
+                showOneDMR(dmr, combined_bsseq, ext = ext)
+                title(
+                    main = sprintf(
+                        "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+                    ),
+                    cex.main = cex_main,
+                    line = 2
+                )
             },
             error = function(e) {
                 flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)), name = "dss_logger")
-                print(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e))) # Debugging output
                 plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
                 text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
             }
         )
-    }, width = plot_width, height = plot_height)
+    }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
 }
