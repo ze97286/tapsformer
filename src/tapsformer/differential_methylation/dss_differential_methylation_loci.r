@@ -130,21 +130,66 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   return(output_filename)
 }
 
-sliding_window_filter <- function(dmls, window_size) {
+sliding_window_filter <- function(dmls, window_size, min_cpgs = 3, consistency_threshold = 0.8) {
   dmls[, window := cut(pos, breaks = seq(min(pos), max(pos) + window_size, by = window_size))]
   windowed_dmls <- dmls[, .(
     mean_diff = mean(diff),
     mean_pval = mean(pval),
-    n_dmls = .N
+    n_dmls = .N,
+    consistency = mean(sign(diff) == sign(mean(diff)))
   ), by = .(chr, window)]
 
-  significant_windows <- windowed_dmls[abs(mean_diff) >= delta & mean_pval < p.threshold & n_dmls >= 3]
+  significant_windows <- windowed_dmls[
+    abs(mean_diff) >= delta &
+      mean_pval < p.threshold &
+      n_dmls >= min_cpgs &
+      consistency >= consistency_threshold
+  ]
+
   dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
+}
+
+cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 10, subsample_fraction = 0.8,
+                                delta, p.threshold, fdr.threshold, smoothing) {
+  all_dmls <- list()
+
+  for (i in 1:n_iterations) {
+    # Subsample from each group separately
+    subsample1 <- sample(group1, length(group1) * subsample_fraction)
+    subsample2 <- sample(group2, length(group2) * subsample_fraction)
+    subsample <- c(subsample1, subsample2)
+
+    sub_bsseq <- bsseq_data[, subsample]
+
+    dml_test <- DMLtest(sub_bsseq, group1 = subsample1, group2 = subsample2, smoothing = smoothing)
+    dmls <- callDML(dml_test, delta = delta, p.threshold = p.threshold)
+
+    dml_dt <- as.data.table(dmls)
+    dml_dt[, significant_after_fdr := fdr < fdr.threshold]
+
+    all_dmls[[i]] <- dml_dt[significant_after_fdr == TRUE, .(chr, pos)]
+  }
+
+  # Keep DMLs that appear in at least half of the iterations
+  dml_counts <- table(unlist(lapply(all_dmls, function(x) paste(x$chr, x$pos))))
+  consistent_dmls <- names(dml_counts[dml_counts >= n_iterations / 2])
+
+  return(consistent_dmls)
+}
+
+adaptive_smooth <- function(bsseq_data, min_span = 200, max_span = 1000, min_cpgs = 20) {
+  gr <- granges(bsseq_data)
+  cpg_density <- width(disjoin(resize(gr, 1000, fix = "center")))
+  span <- pmax(min_span, pmin(max_span, 1000 / cpg_density * min_cpgs))
+
+  BSmooth(bsseq_data, h = span, ns = min_cpgs)
 }
 
 # this is the core function here, doing the DML analysis choosing hypomethylated DMLs and
 # saving the output and visualisations.
-perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min_coverage, window_size, smoothing, cl) {
+perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold,
+                                 min_coverage, window_size, smoothing, cl, n_iterations = 10,
+                                 subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
     "dml_delta_%.2f_p_%.4f_fdr_%.2f_%s",
@@ -152,41 +197,69 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
+  if (smoothing) {
+    flog.info("Performing adaptive smoothing", name = "dss_logger")
+    combined_bsseq <- tryCatch(
+      {
+        adaptive_smooth(combined_bsseq, min_span = min_span, max_span = max_span, min_cpgs = min_cpgs)
+      },
+      error = function(e) {
+        flog.error(paste("Error in adaptive smoothing:", e$message), name = "dss_logger")
+        stop("Adaptive smoothing failed")
+      }
+    )
+    smoothing_for_dmltest <- FALSE
+  } else {
+    smoothing_for_dmltest <- FALSE
+  }
+
   flog.info("Performing DML test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # run the dml test with smoothing (TRUE/FALSE).
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
+  # Cross-validation step
+  flog.info("Performing cross-validation", name = "dss_logger")
+  consistent_dmls <- cross_validate_dmls(combined_bsseq, group1, group2,
+    n_iterations = n_iterations,
+    subsample_fraction = subsample_fraction,
+    delta = delta, p.threshold = p.threshold,
+    fdr.threshold = fdr.threshold, smoothing = smoothing_for_dmltest
+  )
+  saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
+
+  # Run the dml test with smoothing (TRUE/FALSE).
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing_for_dmltest)
 
   flog.info("Calling DMLs", name = "dss_logger")
 
-  # identify DML given the delta and pvalue threshold.
+  # Identify DML given the delta and pvalue threshold.
   dmls <- callDML(dml_test, delta = delta, p.threshold = p.threshold)
 
   dml_dt <- as.data.table(dmls)
 
   z_score <- qnorm(0.975) # Two-tailed 95% CI
 
-  # identify hypomethylated loci in the tumour and check significance
+  # Identify hypomethylated loci in the tumour and check significance
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
     significant_after_fdr = fdr < fdr.threshold,
     mean_methylation_diff = abs(diff),
     lower_ci = diff - (z_score * diff.se),
-    upper_ci = diff + (z_score * diff.se)
+    upper_ci = diff + (z_score * diff.se),
+    ci_excludes_zero = sign(diff - (z_score * diff.se)) == sign(diff + (z_score * diff.se)),
+    consistent = paste(chr, pos) %in% consistent_dmls # Add this line to mark consistent DMLs
   )]
-  dml_dt[, ci_excludes_zero := sign(lower_ci) == sign(upper_ci)]
 
   # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[
     hypo_in_tumour == TRUE &
       significant_after_fdr == TRUE &
       mean_methylation_diff >= delta &
-      ci_excludes_zero == TRUE
+      ci_excludes_zero == TRUE &
+      consistent == TRUE # Use the consistent flag here
   ]
 
-  top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size) 
+  top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size)
   top_hypo_dmls[, composite_score := (abs(stat) * abs(diff)) / (diff.se * sqrt(fdr))]
 
   setorder(top_hypo_dmls, -composite_score)
