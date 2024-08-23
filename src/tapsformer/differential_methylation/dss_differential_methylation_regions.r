@@ -16,7 +16,7 @@ fdr.threshold <- as.numeric(args[3])
 min.CpG <- as.numeric(args[4])
 min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
-smoothing_arg <- tolower(args[7])  # Convert to lowercase for consistency
+smoothing_arg <- tolower(args[7]) # Convert to lowercase for consistency
 smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false") FALSE else NA
 if (is.na(smoothing)) {
   stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
@@ -53,22 +53,17 @@ gc()
 plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext = 0) {
   dmr_plot_dir <- file.path(output_dir, "strongest_hypomethylated_dmr_plots")
   dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
-
   strongest_dmrs <- tail(top_hypo_dmrs[order(top_hypo_dmrs$areaStat), ], n)
 
   for (i in 1:nrow(strongest_dmrs)) {
     dmr <- strongest_dmrs[i, ]
-
     flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end), name = "dss_logger")
-
     filename <- file.path(dmr_plot_dir, sprintf(
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
-
-    plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
+    plot_single_dmr_faceted(filename, dmr, combined_bsseq, i, ext)
   }
-
   flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n), name = "dss_logger")
 }
 

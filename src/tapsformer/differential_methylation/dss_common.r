@@ -23,7 +23,7 @@ bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub"
 )
-cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap")
+cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap","gridExtra")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -452,4 +452,46 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
             }
         )
     }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
+}
+
+plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
+  num_samples <- length(sampleNames(combined_bsseq))
+  
+  # Determine grid layout
+  ncol <- min(5, ceiling(sqrt(num_samples)))
+  nrow <- ceiling(num_samples / ncol)
+  
+  # Create a list to store individual sample plots
+  plot_list <- list()
+  
+  for (sample in sampleNames(combined_bsseq)) {
+    p <- tryCatch({
+      plotRegion(combined_bsseq[, sample], 
+                 region = GRanges(seqnames = dmr$chr, 
+                                  ranges = IRanges(start = dmr$start - ext, end = dmr$end + ext)),
+                 extend = 0, 
+                 main = sample)
+    }, error = function(e) {
+      ggplot() + 
+        annotate("text", x = 1, y = 1, label = paste("Error:", conditionMessage(e)), color = "red") +
+        theme_void()
+    })
+    plot_list[[sample]] <- p
+  }
+  
+  # Combine plots
+  combined_plot <- do.call(gridExtra::grid.arrange, c(plot_list, ncol = ncol))
+  
+  # Add overall title
+  title <- textGrob(sprintf(
+    "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+    i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+  ), gp = gpar(fontsize = 12, fontface = "bold"))
+  
+  final_plot <- gridExtra::grid.arrange(title, combined_plot, 
+                                        heights = c(2, 30))
+  
+  # Save plot
+  ggsave(filename, final_plot, width = 20, height = 4 * nrow, limitsize = FALSE)
+  flog.info(paste("Plot saved as", filename), name = "dss_logger")
 }
