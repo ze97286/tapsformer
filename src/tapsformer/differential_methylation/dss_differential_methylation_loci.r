@@ -98,6 +98,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 
   # Plot function
   plot_func <- function() {
+    print("Generating plot...") # Debug: Indicate that plotting has started
     ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
       geom_point() +
       facet_wrap(~ chr + pos, scales = "free_y") +
@@ -111,6 +112,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 
   # Save the plot with safe_plot
   output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
+  print(sprintf("Saving plot to %s", output_filename)) # Debug: Log where the plot will be saved
   safe_plot(output_filename, plot_func, width = 10, height = 8)
 
   flog.info(sprintf("Plot saved as: %s", output_filename), name = "dss_logger")
