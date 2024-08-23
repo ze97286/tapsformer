@@ -490,7 +490,7 @@ plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
 
     # Add overall title
     title <- grid::textGrob(sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                                    dmr_index, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
+                                    i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
                             gp = gpar(fontface = "bold"))
     
 
