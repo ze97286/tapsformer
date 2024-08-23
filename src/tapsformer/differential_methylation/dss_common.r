@@ -411,6 +411,18 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     num_tumor <- length(tumor_indices)
     num_control <- length(control_indices)
 
+    # Debug: Log the indices and dimensions
+    print(sprintf("Tumor indices: %s", paste(tumor_indices, collapse = ", ")))
+    print(sprintf("Control indices: %s", paste(control_indices, collapse = ", ")))
+
+    # Check the dimensions of the subsetted BSseq objects
+    if (num_tumor > 0) {
+        print(sprintf("Tumor BSseq dimensions: %s", paste(dim(combined_bsseq[, tumor_indices]), collapse = " x ")))
+    }
+    if (num_control > 0) {
+        print(sprintf("Control BSseq dimensions: %s", paste(dim(combined_bsseq[, control_indices]), collapse = " x ")))
+    }
+
     # Adjust margins and text size based on the number of samples
     if (num_tumor + num_control > 20) {
         mar <- c(4, 4, 2, 2) + 0.1
@@ -435,6 +447,7 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
                 # Plot for tumor samples
                 par(mar = mar)
                 if (num_tumor > 0) {
+                    print("Plotting tumor samples...") # Debugging statement
                     showOneDMR(dmr, combined_bsseq[, tumor_indices], ext = ext)
                     title(
                         main = sprintf(
@@ -451,6 +464,7 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
                 # Plot for control samples
                 par(mar = mar)
                 if (num_control > 0) {
+                    print("Plotting control samples...") # Debugging statement
                     showOneDMR(dmr, combined_bsseq[, control_indices], ext = ext)
                     title(
                         main = sprintf(
@@ -466,6 +480,7 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
             },
             error = function(e) {
                 flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)), name = "dss_logger")
+                print(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e))) # Debugging output
                 plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
                 text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
             }
