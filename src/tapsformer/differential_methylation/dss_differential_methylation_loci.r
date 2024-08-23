@@ -96,29 +96,43 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
     return(NULL)
   }
 
-  # Plot function
-  plot_func <- function() {
-    print("Generating plot...") # Debug: Indicate that plotting has started
-    ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
-      geom_point() +
-      facet_wrap(~ chr + pos, scales = "free_y") +
-      theme_bw() +
-      labs(
-        title = "Methylation Levels Across Samples for Each DML",
-        x = "Sample", y = "Methylation Level"
-      ) +
-      theme(axis.text.x = element_text(angle = 90, hjust = 1))
-  }
-
-  # Save the plot with safe_plot
+  # Generate and save the plot directly
   output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
   print(sprintf("Saving plot to %s", output_filename)) # Debug: Log where the plot will be saved
-  safe_plot(output_filename, plot_func, width = 10, height = 8)
 
-  flog.info(sprintf("Plot saved as: %s", output_filename), name = "dss_logger")
+  tryCatch(
+    {
+      # Open a new svg device
+      svglite::svglite(output_filename, width = 10, height = 8)
+
+      # Generate the plot
+      plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
+        geom_point() +
+        facet_wrap(~ chr + pos, scales = "free_y") +
+        theme_bw() +
+        labs(
+          title = "Methylation Levels Across Samples for Each DML",
+          x = "Sample", y = "Methylation Level"
+        ) +
+        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+      print(plot) # Ensure the plot is rendered
+
+      # Close the svg device
+      dev.off()
+      print("Plot saved successfully.") # Debug: Confirm plot was saved
+    },
+    error = function(e) {
+      # Handle any errors that occur during plotting
+      flog.error(sprintf("Error generating plot: %s", conditionMessage(e)), name = "dss_logger")
+      print(sprintf("Error generating plot: %s", conditionMessage(e)))
+      dev.off() # Ensure device is closed even if there's an error
+    }
+  )
 
   return(output_filename)
 }
+
 
 # this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
 # saving the output and visualisations.
