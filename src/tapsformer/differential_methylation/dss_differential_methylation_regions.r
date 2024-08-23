@@ -80,8 +80,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   flog.info("Performing DMR test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-  BPPARAM <- MulticoreParam(workers = 6)
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing, BPPARAM = BPPARAM)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
 
   flog.info("Calling DMRs", name = "dss_logger")
   dmrs <- callDMR(

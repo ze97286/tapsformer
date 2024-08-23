@@ -157,8 +157,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
   # run the dml test with smoothing (TRUE/FALSE). 
-  BPPARAM <- MulticoreParam(workers = 6)
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing, BPPARAM = BPPARAM)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
 
   flog.info("Calling DMLs", name = "dss_logger")
 
