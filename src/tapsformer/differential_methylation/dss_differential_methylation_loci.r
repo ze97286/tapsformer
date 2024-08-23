@@ -51,21 +51,11 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   for (i in 1:nrow(top_hypo_dmls)) {
     dml <- top_hypo_dmls[i, ]
 
-    # Debug: Log the DML being processed
-    print(sprintf("Processing DML: chr = %s, pos = %d", dml$chr, dml$pos))
-
     # Find the corresponding methylation levels
     matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
 
-    # Debug: Check matching indices
-    print(sprintf("Matching indices found: %s", paste(matching_indices, collapse = ", ")))
-
     # Extract the methylation levels for this DML
     meth_levels <- methylation_data[matching_indices, , drop = FALSE]
-
-    # Debug: Log the methylation levels
-    print("Methylation levels:")
-    print(meth_levels)
 
     # Check if meth_levels has valid data
     if (is.null(meth_levels) || nrow(meth_levels) == 0 || ncol(meth_levels) == 0) {
@@ -77,19 +67,14 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
     plot_data[i, (sample_names) := as.list(meth_levels)]
   }
 
-  # Debug: Check plot_data
-  print("Plot data before melting:")
-  print(head(plot_data))
-
   # Melt the data for plotting
   plot_data <- melt(plot_data,
     id.vars = c("chr", "pos"),
     variable.name = "Sample", value.name = "MethylationLevel"
   )
 
-  # Debug: Check plot_data after melting
-  print("Plot data after melting:")
-  print(head(plot_data))
+  # Add a new column to identify tumour and control samples
+  plot_data[, SampleType := ifelse(grepl("^tumour", Sample), "Tumour", "Control")]
 
   # Check if plot_data is empty
   if (nrow(plot_data) == 0) {
@@ -99,29 +84,33 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 
   # Generate and save the plot directly
   output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
-  print(sprintf("Saving plot to %s", output_filename)) # Debug: Log where the plot will be saved
 
   tryCatch(
     {
-      # Open a new svg device
-      svglite::svglite(output_filename, width = 10, height = 8)
+      # Open a new svg device with larger size
+      svglite::svglite(output_filename, width = 15, height = 10)  # Adjust width and height for larger rectangles
 
       # Generate the plot
-      plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel)) +
-        geom_point() +
-        facet_wrap(~ chr + pos, scales = "free_y") +
+      plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
+        geom_point(size = 2) +
+        facet_wrap(~ chr + pos, scales = "free_y", ncol = 10) +  # Set grid layout to 10 columns
         theme_bw() +
         labs(
           title = "Methylation Levels Across Samples for Each DML",
           x = "Sample", y = "Methylation Level"
         ) +
-        theme(axis.text.x = element_text(angle = 90, hjust = 1))
+        scale_shape_manual(values = c(Tumour = 16, Control = 1)) +  # Full circle for Tumour, open circle for Control
+        scale_color_manual(values = c(Tumour = "blue", Control = "red")) +  # Blue for Tumour, Red for Control
+        theme(
+          axis.text.x = element_text(angle = 90, hjust = 1),
+          strip.text = element_text(size = 12),  # Increase strip text size for readability
+          plot.margin = unit(c(1, 1, 1, 1), "cm")  # Adjust margins if needed
+        )
 
       print(plot) # Ensure the plot is rendered
 
       # Close the svg device
       dev.off()
-      print("Plot saved successfully.") # Debug: Confirm plot was saved
     },
     error = function(e) {
       # Handle any errors that occur during plotting
@@ -133,6 +122,8 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 
   return(output_filename)
 }
+
+
 
 # this is the core function here, doing the DML analysis + FDR correction, choosing hypomethylated DMLs and
 # saving the output and visualisations.
@@ -182,7 +173,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )
 
   flog.info("Creating visualizations", name = "dss_logger")
-  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 50)
+  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 36)
   str(strongest_dmls)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
   create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir)
