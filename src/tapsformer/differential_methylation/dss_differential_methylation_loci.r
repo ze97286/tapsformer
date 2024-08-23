@@ -171,17 +171,13 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     hypo_in_tumour = diff < 0,
     significant_after_fdr = fdr < fdr.threshold,
     mean_methylation_diff = abs(diff),
-    methylation_variance_ratio = pmax(var1, var2) / pmin(var1, var2),
-    coverage = pmin(n1, n2)
   )]
 
   # Select top hypomethylated DMLs
   top_hypo_dmls <- dml_dt[
     hypo_in_tumour == TRUE &
       significant_after_fdr == TRUE &
-      mean_methylation_diff >= delta &
-      methylation_variance_ratio <= 2 &
-      coverage >= min_coverage
+      mean_methylation_diff >= delta      
   ]
 
   top_hypo_dmls <- sliding_window_filter(top_hypo_dmls, window_size)
