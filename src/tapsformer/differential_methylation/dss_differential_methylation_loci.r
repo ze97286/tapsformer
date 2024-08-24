@@ -120,9 +120,10 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
         scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
         scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
         theme(
-          axis.text.x = element_text(angle = 90, hjust = 1),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), # Rotate labels 45 degrees
           strip.text = element_text(size = 12), # Adjust if needed
-          plot.margin = unit(c(1, 1, 1, 1), "cm")
+          plot.margin = unit(c(1, 1, 1, 1), "cm"),
+          panel.spacing = unit(1, "lines") # Increase spacing between panels
         )
 
       print(plot)
@@ -134,7 +135,6 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       dev.off() # Ensure device is closed even if there's an error
     }
   )
-
   return(output_filename)
 }
 
