@@ -425,23 +425,23 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
     tryCatch(
         {
             safe_plot(filename, function() {
-                # Setting up the layout
-                layout(matrix(c(1, 2), nrow = 1, ncol = 2))
-                print("Layout set up successfully.")
+                # Set up 1x2 layout using mfrow
+                par(mfrow = c(1, 2), mar = c(5, 5, 2, 2)) # 1 row, 2 columns
 
                 # Plotting tumour samples
-                par(mar = c(5, 5, 2, 2))
                 print("Plotting tumour samples...")
                 showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
                 title("Tumour Samples", line = 0.5, cex.main = 1.2)
                 print("Tumour samples plotted successfully.")
 
                 # Plotting control samples
-                par(mar = c(5, 5, 2, 2))
                 print("Plotting control samples...")
                 showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
                 title("Control Samples", line = 0.5, cex.main = 1.2)
                 print("Control samples plotted successfully.")
+
+                # Reset graphical parameters to default after plotting
+                par(mfrow = c(1, 1))
             }, width = plot_width, height = plot_height)
 
             print(sprintf("Plot saved to %s", filename))
@@ -452,3 +452,4 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
         }
     )
 }
+
