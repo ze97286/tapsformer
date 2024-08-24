@@ -52,7 +52,7 @@ gc()
 plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   # Get the raw methylation data
   methylation_data <- getMeth(combined_bsseq, type = "raw")
-  sample_names <- colnames(methylation_data) # Get the actual sample names
+  sample_names <- colnames(methylation_data) 
   plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
 
   for (i in 1:nrow(top_hypo_dmls)) {

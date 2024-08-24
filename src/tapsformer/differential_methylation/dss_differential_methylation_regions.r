@@ -84,34 +84,61 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
   # Cross-validation function
-  cross_validate_dmrs <- function() {
-    all_dmrs <- list()
-    for (i in 1:n_iterations) {
-      flog.info(sprintf("Cross-validation iteration %d/%d", i, n_iterations), name = "dss_logger")
+  cross_validate_dmrs <- function(iteration) {
+    tryCatch(
+      {
+        flog.info(sprintf("Cross-validation iteration %d/%d", iteration, n_iterations), name = "dss_logger")
 
-      # Subsample from each group
-      subsample1 <- sample(group1, length(group1) * subsample_fraction)
-      subsample2 <- sample(group2, length(group2) * subsample_fraction)
-      subsample <- c(subsample1, subsample2)
+        # Subsample from each group
+        subsample1 <- sample(group1, length(group1) * subsample_fraction)
+        subsample2 <- sample(group2, length(group2) * subsample_fraction)
+        subsample <- c(subsample1, subsample2)
 
-      sub_bsseq <- combined_bsseq[, subsample]
+        flog.info(sprintf("Subsampled %d samples", length(subsample)), name = "dss_logger")
 
-      dml_test <- DMLtest(sub_bsseq, group1 = subsample1, group2 = subsample2, smoothing = smoothing)
-      dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
+        sub_bsseq <- combined_bsseq[, subsample]
 
-      all_dmrs[[i]] <- as.data.table(dmrs)[, .(chr, start, end)]
-    }
-    return(all_dmrs)
+        flog.info("Running DMLtest", name = "dss_logger")
+        dml_test <- DMLtest(sub_bsseq, group1 = subsample1, group2 = subsample2, smoothing = smoothing)
+
+        flog.info("Calling DMRs", name = "dss_logger")
+        dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
+
+        flog.info(sprintf("Found %d DMRs in iteration %d", nrow(dmrs), iteration), name = "dss_logger")
+
+        return(as.data.table(dmrs)[, .(chr, start, end)])
+      },
+      error = function(e) {
+        flog.error(sprintf("Error in iteration %d: %s", iteration, conditionMessage(e)), name = "dss_logger")
+        return(NULL)
+      }
+    )
   }
 
   # Perform cross-validation
-  cv_results <- cross_validate_dmrs()
+  flog.info("Starting cross-validation", name = "dss_logger")
+  cv_results <- lapply(1:n_iterations, cross_validate_dmrs) # Using lapply instead of parLapply for debugging
+
+  # Remove NULL results
+  cv_results <- cv_results[!sapply(cv_results, is.null)]
+
+  if (length(cv_results) == 0) {
+    flog.error("No valid results from cross-validation. Stopping analysis.", name = "dss_logger")
+    return(NULL)
+  }
 
   # Identify consistent DMRs
+  flog.info("Identifying consistent DMRs", name = "dss_logger")
   consistent_dmrs <- Reduce(function(x, y) merge(x, y, by = c("chr", "start", "end")), cv_results)
-  flog.info(sprintf("Identified %d consistent DMRs across %d iterations", nrow(consistent_dmrs), n_iterations), name = "dss_logger")
+  flog.info(sprintf("Identified %d consistent DMRs across %d valid iterations", nrow(consistent_dmrs), length(cv_results)), name = "dss_logger")
+
+  if (nrow(consistent_dmrs) == 0) {
+    flog.error("No consistent DMRs found. Stopping analysis.", name = "dss_logger")
+    return(NULL)
+  }
 
   # Perform DMR analysis on full dataset
+  flog.info("Performing DMR analysis on full dataset", name = "dss_logger")
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
   dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
   dmr_dt <- as.data.table(dmrs)
@@ -119,7 +146,13 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Filter for consistent DMRs
   dmr_dt <- merge(dmr_dt, consistent_dmrs, by = c("chr", "start", "end"))
 
+  if (nrow(dmr_dt) == 0) {
+    flog.error("No DMRs remain after filtering for consistency. Stopping analysis.", name = "dss_logger")
+    return(NULL)
+  }
+
   # Rest of your analysis remains the same
+  flog.info("Calculating p-values", name = "dss_logger")
   dml_results <- as.data.table(dml_test)
   setkey(dml_results, chr, pos)
 
@@ -130,7 +163,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     }
     min(pvals, na.rm = TRUE)
   }
-  dmr_dt[, pval := parSapply(cl, split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)]
+  dmr_dt[, pval := sapply(split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)] # Using sapply instead of parSapply for debugging
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
   dmr_dt[, `:=`(
     hypo_in_tumour = diff.Methy < 0,
@@ -139,6 +172,12 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   # Select top hypomethylated DMRs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
+
+  if (nrow(top_hypo_dmrs) == 0) {
+    flog.error("No hypomethylated DMRs found after filtering. Stopping analysis.", name = "dss_logger")
+    return(NULL)
+  }
+
   setorder(top_hypo_dmrs, -areaStat)
   thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir)
 
