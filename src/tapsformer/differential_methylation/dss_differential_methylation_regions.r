@@ -91,10 +91,10 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   print(sprintf("Initial analysis found %d DMRs", initial_dmr_count))
 
   # Function to assess individual DMR robustness
-  assess_dmr_robustness <- function(dmr, dmr_index) {
-    chr <- dmr$chr
-    start <- dmr$start
-    end <- dmr$end
+  assess_dmr_robustness <- function(dmr_row, dmr_index) {
+    chr <- dmr_row$chr
+    start <- dmr_row$start
+    end <- dmr_row$end
 
     print(sprintf("Assessing robustness for DMR %d: %s:%d-%d", dmr_index, chr, start, end))
 
@@ -133,7 +133,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Assess robustness for each DMR
   print("Assessing robustness of individual DMRs")
   dmr_dt <- as.data.table(dmrs)
-  dmr_dt[, robustness_score := sapply(.SD, assess_dmr_robustness), .SDcols = names(dmr_dt)]
+  dmr_dt[, robustness_score := sapply(1:nrow(dmr_dt), function(i) assess_dmr_robustness(dmr_dt[i, ], i))]
 
   # Calculate p-values and FDR
   dml_results <- as.data.table(dml_test)
