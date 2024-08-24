@@ -71,7 +71,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 
 # this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
 # saving the output and visualisations.
-perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, n_iterations = 10, subsample_fraction = 0.8) {
+perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, n_iterations = 5, subsample_fraction = 0.8) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
     "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_cv",
