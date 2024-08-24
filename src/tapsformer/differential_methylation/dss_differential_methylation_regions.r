@@ -40,10 +40,10 @@ log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dmr_a
 
 # Set up logging
 flog.logger("dss_logger", appender.file(log_dir))
-flog.threshold(INFO, name = "dss_logger")
-flog.threshold(WARN, name = "dss_logger")
-flog.threshold(ERROR, name = "dss_logger")
-flog.info("Starting DSS DMR analysis", name = "dss_logger")
+flog.threshold(INFO)
+flog.threshold(WARN)
+flog.threshold(ERROR)
+print("Starting DSS DMR analysis")
 
 # data loading
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
@@ -59,14 +59,14 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 
   for (i in 1:nrow(strongest_dmrs)) {
     dmr <- strongest_dmrs[i, ]
-    flog.info(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end), name = "dss_logger")
+    print(sprintf("Processing DMR %d: chr%s:%d-%d", i, dmr$chr, dmr$start, dmr$end))
     filename <- file.path(dmr_plot_dir, sprintf(
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
     plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
   }
-  flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n), name = "dss_logger")
+  print(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
 }
 
 # this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
@@ -74,79 +74,83 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, n_iterations = 5, subsample_fraction = 0.8) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
-    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_bootstrap",
+    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_stability",
     delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  print("Performing DMR analysis with bootstrapping")
+  print("Performing DMR analysis with stability assessment")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # Bootstrapping function
-  bootstrap_dmrs <- function(iteration) {
+  # Perform initial DMR analysis on full dataset
+  print("Performing initial DMR analysis on full dataset")
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
+  dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
+  initial_dmr_count <- nrow(dmrs)
+  print(sprintf("Initial analysis found %d DMRs", initial_dmr_count))
+
+  # Stability assessment function
+  assess_stability <- function(iteration) {
     tryCatch(
       {
-        print(sprintf("Bootstrap iteration %d/%d", iteration, n_iterations))
+        print(sprintf("Stability assessment iteration %d/%d", iteration, n_iterations))
 
-        # Bootstrap samples with replacement
-        bootstrap1 <- sample(group1, length(group1), replace = TRUE)
-        bootstrap2 <- sample(group2, length(group2), replace = TRUE)
+        # Randomly subsample 90% of samples from each group
+        subsample1 <- sample(group1, floor(length(group1) * 0.9))
+        subsample2 <- sample(group2, floor(length(group2) * 0.9))
 
-        dml_test <- DMLtest(combined_bsseq, group1 = bootstrap1, group2 = bootstrap2, smoothing = smoothing)
-        dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
+        sub_dml_test <- DMLtest(combined_bsseq[, c(subsample1, subsample2)],
+          group1 = subsample1, group2 = subsample2, smoothing = smoothing
+        )
+        sub_dmrs <- callDMR(sub_dml_test,
+          delta = delta, p.threshold = p.threshold,
+          minlen = min.len, minCG = min.CpG, dis.merge = dis.merge
+        )
 
-        print(sprintf("Found %d DMRs in iteration %d", nrow(dmrs), iteration))
+        print(sprintf("Found %d DMRs in iteration %d", nrow(sub_dmrs), iteration))
 
-        return(as.data.table(dmrs)[, .(chr, start, end)])
+        return(as.data.table(sub_dmrs)[, .(chr, start, end)])
       },
       error = function(e) {
-        flog.error(sprintf("Error in iteration %d: %s", iteration, conditionMessage(e)), name = "dss_logger")
+        flog.error(sprintf("Error in iteration %d: %s", iteration, conditionMessage(e)))
         return(NULL)
       }
     )
   }
 
-  # Perform bootstrapping
-  flog.info("Starting bootstrapping", name = "dss_logger")
-  bootstrap_results <- lapply(1:n_iterations, bootstrap_dmrs)
+  # Perform stability assessment
+  print("Starting stability assessment")
+  stability_results <- lapply(1:n_iterations, assess_stability)
 
   # Remove NULL results
-  bootstrap_results <- bootstrap_results[!sapply(bootstrap_results, is.null)]
+  stability_results <- stability_results[!sapply(stability_results, is.null)]
 
-  if (length(bootstrap_results) == 0) {
-    flog.error("No valid results from bootstrapping. Stopping analysis.", name = "dss_logger")
+  if (length(stability_results) == 0) {
+    flog.error("No valid results from stability assessment. Stopping analysis.")
     return(NULL)
   }
 
-  # Identify consistent DMRs (present in at least 50% of bootstrap iterations)
-  all_dmrs <- rbindlist(bootstrap_results)
+  # Identify stable DMRs (present in at least 80% of iterations)
+  all_dmrs <- rbindlist(stability_results)
   dmr_counts <- all_dmrs[, .N, by = .(chr, start, end)]
-  consistent_dmrs <- dmr_counts[N >= (n_iterations * 0.5)]
+  stable_dmrs <- dmr_counts[N >= (length(stability_results) * 0.8)]
 
-  flog.info(sprintf("Identified %d consistent DMRs across %d valid iterations", nrow(consistent_dmrs), length(bootstrap_results)), name = "dss_logger")
+  print(sprintf("Identified %d stable DMRs across %d valid iterations", nrow(stable_dmrs), length(stability_results)))
 
-  if (nrow(consistent_dmrs) == 0) {
-    flog.error("No consistent DMRs found. Stopping analysis.", name = "dss_logger")
-    return(NULL)
-  }
-
-  # Perform DMR analysis on full dataset
-  flog.info("Performing DMR analysis on full dataset", name = "dss_logger")
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
-  dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
+  # Filter initial DMRs for stability
   dmr_dt <- as.data.table(dmrs)
+  stable_dmr_dt <- merge(dmr_dt, stable_dmrs[, .(chr, start, end)], by = c("chr", "start", "end"))
 
-  # Filter for consistent DMRs
-  dmr_dt <- merge(dmr_dt, consistent_dmrs[, .(chr, start, end)], by = c("chr", "start", "end"))
+  print(sprintf("Final DMR count after stability filtering: %d", nrow(stable_dmr_dt)))
 
-  if (nrow(dmr_dt) == 0) {
-    flog.error("No DMRs remain after filtering for consistency. Stopping analysis.", name = "dss_logger")
+  if (nrow(stable_dmr_dt) == 0) {
+    flog.error("No stable DMRs found. Stopping analysis.")
     return(NULL)
   }
 
   # Rest of your analysis remains the same
-  flog.info("Calculating p-values", name = "dss_logger")
+  print("Calculating p-values")
   dml_results <- as.data.table(dml_test)
   setkey(dml_results, chr, pos)
 
@@ -168,7 +172,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
 
   if (nrow(top_hypo_dmrs) == 0) {
-    flog.error("No hypomethylated DMRs found after filtering. Stopping analysis.", name = "dss_logger")
+    flog.error("No hypomethylated DMRs found after filtering. Stopping analysis.")
     return(NULL)
   }
 
@@ -192,7 +196,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )
 
   # Visualizations
-  flog.info("Creating visualizations", name = "dss_logger")
+  print("Creating visualizations")
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
   create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir)
   create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
@@ -201,15 +205,15 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   create_manhattan_plot(dmr_dt, output_dir)
   create_qq_plot(dmr_dt, output_dir)
   create_genomic_context_visualization(dmr_dt, diff_col = "diff.Methy", output_dir)
-  flog.info("Analysis complete", name = "dss_logger")
+  print("Analysis complete")
   return(dmr_dt)
 }
 
 # perform analysis with provided parameters
-flog.info(sprintf(
+print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
-), name = "dss_logger")
+))
 result <- perform_dmr_analysis(combined_bsseq, base_dir,
   delta = delta,
   p.threshold = p.threshold,
@@ -224,14 +228,14 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir,
 stopCluster(cl)
 
 # Result Summary
-flog.info("Analysis Results Summary:", name = "dss_logger")
-flog.info(sprintf("Total DMRs found: %d", nrow(result)), name = "dss_logger")
-flog.info(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)), name = "dss_logger")
-flog.info(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)), name = "dss_logger")
+print("Analysis Results Summary:")
+print(sprintf("Total DMRs found: %d", nrow(result)))
+print(sprintf("Hypomethylated DMRs in tumor: %d", sum(result$hypo_in_tumour)))
+print(sprintf("Hypermethylated DMRs in tumor: %d", sum(!result$hypo_in_tumour)))
 mean_diff <- mean(result$diff.Methy)
-flog.info(sprintf("Mean methylation difference: %.4f", mean_diff), name = "dss_logger")
+print(sprintf("Mean methylation difference: %.4f", mean_diff))
 median_diff <- median(result$diff.Methy)
-flog.info(sprintf("Median methylation difference: %.4f", median_diff), name = "dss_logger")
+print(sprintf("Median methylation difference: %.4f", median_diff))
 end_time <- Sys.time()
-flog.info(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"), name = "dss_logger")
+print(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
 options(warn = 0)
