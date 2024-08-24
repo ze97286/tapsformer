@@ -74,12 +74,12 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, n_iterations = 5, subsample_fraction = 0.8) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
-    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_stability",
+    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_robust",
     delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  print("Performing DMR analysis with stability assessment")
+  print("Performing robust DMR analysis")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
@@ -90,67 +90,52 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   initial_dmr_count <- nrow(dmrs)
   print(sprintf("Initial analysis found %d DMRs", initial_dmr_count))
 
-  # Stability assessment function
-  assess_stability <- function(iteration) {
-    tryCatch(
-      {
-        print(sprintf("Stability assessment iteration %d/%d", iteration, n_iterations))
+  # Function to assess individual DMR robustness
+  assess_dmr_robustness <- function(dmr, dmr_index) {
+    chr <- dmr$chr
+    start <- dmr$start
+    end <- dmr$end
 
-        # Randomly subsample 90% of samples from each group
-        subsample1 <- sample(group1, floor(length(group1) * 0.9))
-        subsample2 <- sample(group2, floor(length(group2) * 0.9))
+    print(sprintf("Assessing robustness for DMR %d: %s:%d-%d", dmr_index, chr, start, end))
 
-        sub_dml_test <- DMLtest(combined_bsseq[, c(subsample1, subsample2)],
-          group1 = subsample1, group2 = subsample2, smoothing = smoothing
-        )
-        sub_dmrs <- callDMR(sub_dml_test,
-          delta = delta, p.threshold = p.threshold,
-          minlen = min.len, minCG = min.CpG, dis.merge = dis.merge
-        )
+    robustness_score <- 0
+    for (i in 1:n_iterations) {
+      print(sprintf("  Iteration %d/%d for DMR %d", i, n_iterations, dmr_index))
 
-        print(sprintf("Found %d DMRs in iteration %d", nrow(sub_dmrs), iteration))
+      subsample1 <- sample(group1, floor(length(group1) * 0.8))
+      subsample2 <- sample(group2, floor(length(group2) * 0.8))
+      subsample <- c(subsample1, subsample2)
 
-        return(as.data.table(sub_dmrs)[, .(chr, start, end)])
-      },
-      error = function(e) {
-        flog.error(sprintf("Error in iteration %d: %s", iteration, conditionMessage(e)))
-        return(NULL)
+      print(sprintf("    Subsampled %d tumour and %d control samples", length(subsample1), length(subsample2)))
+
+      sub_dml_test <- DMLtest(combined_bsseq[, subsample],
+        group1 = subsample1, group2 = subsample2, smoothing = smoothing
+      )
+      sub_dmrs <- callDMR(sub_dml_test,
+        delta = delta, p.threshold = p.threshold,
+        minlen = min.len, minCG = min.CpG, dis.merge = dis.merge
+      )
+
+      print(sprintf("    Found %d DMRs in this iteration", nrow(sub_dmrs)))
+
+      if (any(sub_dmrs$chr == chr & sub_dmrs$start <= end & sub_dmrs$end >= start)) {
+        robustness_score <- robustness_score + 1
+        print(sprintf("    DMR %d found in iteration %d", dmr_index, i))
+      } else {
+        print(sprintf("    DMR %d not found in iteration %d", dmr_index, i))
       }
-    )
+    }
+    final_score <- robustness_score / n_iterations
+    print(sprintf("  Final robustness score for DMR %d: %.2f", dmr_index, final_score))
+    return(final_score)
   }
 
-  # Perform stability assessment
-  print("Starting stability assessment")
-  stability_results <- lapply(1:n_iterations, assess_stability)
-
-  # Remove NULL results
-  stability_results <- stability_results[!sapply(stability_results, is.null)]
-
-  if (length(stability_results) == 0) {
-    flog.error("No valid results from stability assessment. Stopping analysis.")
-    return(NULL)
-  }
-
-  # Identify stable DMRs (present in at least 80% of iterations)
-  all_dmrs <- rbindlist(stability_results)
-  dmr_counts <- all_dmrs[, .N, by = .(chr, start, end)]
-  stable_dmrs <- dmr_counts[N >= (length(stability_results) * 0.8)]
-
-  print(sprintf("Identified %d stable DMRs across %d valid iterations", nrow(stable_dmrs), length(stability_results)))
-
-  # Filter initial DMRs for stability
+  # Assess robustness for each DMR
+  print("Assessing robustness of individual DMRs")
   dmr_dt <- as.data.table(dmrs)
-  stable_dmr_dt <- merge(dmr_dt, stable_dmrs[, .(chr, start, end)], by = c("chr", "start", "end"))
+  dmr_dt[, robustness_score := sapply(.SD, assess_dmr_robustness), .SDcols = names(dmr_dt)]
 
-  print(sprintf("Final DMR count after stability filtering: %d", nrow(stable_dmr_dt)))
-
-  if (nrow(stable_dmr_dt) == 0) {
-    flog.error("No stable DMRs found. Stopping analysis.")
-    return(NULL)
-  }
-
-  # Rest of your analysis remains the same
-  print("Calculating p-values")
+  # Calculate p-values and FDR
   dml_results <- as.data.table(dml_test)
   setkey(dml_results, chr, pos)
 
@@ -161,7 +146,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     }
     min(pvals, na.rm = TRUE)
   }
-  dmr_dt[, pval := sapply(split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)] # Using sapply instead of parSapply for debugging
+  dmr_dt[, pval := sapply(split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)]
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
   dmr_dt[, `:=`(
     hypo_in_tumour = diff.Methy < 0,
@@ -169,17 +154,21 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )]
 
   # Select top hypomethylated DMRs
-  top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE & significant_after_fdr == TRUE]
+  top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE &
+    significant_after_fdr == TRUE &
+    robustness_score >= 0.8]
+
+  setorder(top_hypo_dmrs, -robustness_score, -areaStat)
+
+  print(sprintf("Identified %d robust hypomethylated DMRs", nrow(top_hypo_dmrs)))
 
   if (nrow(top_hypo_dmrs) == 0) {
-    flog.error("No hypomethylated DMRs found after filtering. Stopping analysis.")
+    flog.error("No robust hypomethylated DMRs found. Stopping analysis.")
     return(NULL)
   }
 
-  setorder(top_hypo_dmrs, -areaStat)
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir)
-
   # Categorize DMR strength
+  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir)
   top_hypo_dmrs[, hypomethylation_strength := case_when(
     areaStat >= thresholds$very_strong ~ "Very Strong",
     areaStat >= thresholds$strong ~ "Strong",
@@ -187,13 +176,13 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     TRUE ~ "Weak"
   )]
 
-  print(table(top_hypo_dmrs$hypomethylation_strength))
-
   # Save output
-  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
+  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength, robustness_score)],
     file.path(output_dir, "hypomethylated_dmrs.bed"),
     sep = "\t"
   )
+
+  print(table(top_hypo_dmrs$hypomethylation_strength))
 
   # Visualizations
   print("Creating visualizations")
