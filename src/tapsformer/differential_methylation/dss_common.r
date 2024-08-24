@@ -410,35 +410,32 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
-    # Extracting sample names
-    tumour_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
-    control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+    # Extracting sample names (both tumour and control)
+    sample_names <- sampleNames(combined_bsseq)
+    num_samples <- length(sample_names)
 
     # Debugging prints
     print(sprintf("Processing DMR %d: %s:%d-%d with ext = %d", i, dmr$chr, dmr$start, dmr$end, ext))
-    print(sprintf("Tumour samples: %s", paste(tumour_samples, collapse = ", ")))
-    print(sprintf("Control samples: %s", paste(control_samples, collapse = ", ")))
+    print(sprintf("Samples: %s", paste(sample_names, collapse = ", ")))
 
-    plot_width <- 15 # Width for side-by-side plots
-    plot_height <- 10 # Height adjusted for layout
+    # Set plot dimensions
+    plot_width <- 10 # Consistent width
+    plot_height <- max(5, num_samples * 0.8) # Dynamic height: at least 5, or more depending on number of samples
 
     tryCatch(
         {
             safe_plot(filename, function() {
-                # Set up 1x2 layout using mfrow
-                par(mfrow = c(1, 2), mar = c(5, 5, 2, 2)) # 1 row, 2 columns
+                # Set up a layout with one plot per row
+                par(mfrow = c(num_samples, 1))
+                par(mar = c(5, 5, 2, 2)) # Set margins for readability
 
-                # Plotting tumour samples
-                print("Plotting tumour samples...")
-                showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
-                title("Tumour Samples", line = 0.5, cex.main = 1.2)
-                print("Tumour samples plotted successfully.")
-
-                # Plotting control samples
-                print("Plotting control samples...")
-                showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
-                title("Control Samples", line = 0.5, cex.main = 1.2)
-                print("Control samples plotted successfully.")
+                # Plot all samples in one column
+                for (sample in sample_names) {
+                    print(sprintf("Plotting sample: %s...", sample))
+                    showOneDMR(dmr, combined_bsseq[, sample], ext = ext)
+                    title(sample, line = 0.5, cex.main = 1.2)
+                    print(sprintf("Sample %s plotted successfully.", sample))
+                }
 
                 # Reset graphical parameters to default after plotting
                 par(mfrow = c(1, 1))
@@ -452,4 +449,3 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
         }
     )
 }
-
