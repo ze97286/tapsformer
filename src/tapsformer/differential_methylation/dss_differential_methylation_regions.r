@@ -67,7 +67,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 50, ext
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
-    plot_single_dmr_faceted(filename, dmr, combined_bsseq, i, ext, smooth)
+    plot_single_dmr_faceted(filename, dmr, combined_bsseq, i, ext)
   }
   flog.info(sprintf("Completed plotting %d strongest hypomethylated DMRs", n), name = "dss_logger")
 }

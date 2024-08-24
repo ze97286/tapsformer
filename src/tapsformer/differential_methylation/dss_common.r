@@ -454,7 +454,7 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
 }
 
-plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext, smooth = TRUE) {
+plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
     num_samples <- length(sampleNames(combined_bsseq))
     ncol <- min(5, ceiling(sqrt(num_samples)))
     nrow <- ceiling(num_samples / ncol)
@@ -469,8 +469,7 @@ plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext, smoot
                         ranges = IRanges(start = dmr$start - ext, end = dmr$end + ext)
                     ),
                     extend = 0,
-                    main = sample,
-                    type = if (smooth) "smooth" else "raw" # Use 'raw' if not smoothed
+                    main = sample
                 )
             },
             error = function(e) {
@@ -490,6 +489,7 @@ plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext, smoot
         ),
         gp = gpar(fontface = "bold")
     )
+
     final_plot <- gridExtra::grid.arrange(title, combined_plot, heights = c(2, 30))
     ggsave(filename, final_plot, width = 20, height = 4 * nrow, limitsize = FALSE)
     flog.info(paste("Plot saved as", filename), name = "dss_logger")

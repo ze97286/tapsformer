@@ -177,14 +177,6 @@ cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 10, s
   return(consistent_dmls)
 }
 
-adaptive_smooth <- function(bsseq_data, min_span = 200, max_span = 1000, min_cpgs = 20) {
-  gr <- granges(bsseq_data)
-  cpg_density <- width(disjoin(resize(gr, 1000, fix = "center")))
-  span <- pmax(min_span, pmin(max_span, 1000 / cpg_density * min_cpgs))
-
-  BSmooth(bsseq_data, h = span, ns = min_cpgs)
-}
-
 # this is the core function here, doing the DML analysis choosing hypomethylated DMLs and
 # saving the output and visualisations.
 perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold,
@@ -196,22 +188,6 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     delta, p.threshold, fdr.threshold, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-
-  if (smoothing) {
-    flog.info("Performing adaptive smoothing", name = "dss_logger")
-    combined_bsseq <- tryCatch(
-      {
-        adaptive_smooth(combined_bsseq, min_span = min_span, max_span = max_span, min_cpgs = min_cpgs)
-      },
-      error = function(e) {
-        flog.error(paste("Error in adaptive smoothing:", e$message), name = "dss_logger")
-        stop("Adaptive smoothing failed")
-      }
-    )
-    smoothing_for_dmltest <- FALSE
-  } else {
-    smoothing_for_dmltest <- FALSE
-  }
 
   flog.info("Performing DML test", name = "dss_logger")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
@@ -228,7 +204,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
 
   # Run the dml test with smoothing (TRUE/FALSE).
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing_for_dmltest)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
 
   flog.info("Calling DMLs", name = "dss_logger")
 
