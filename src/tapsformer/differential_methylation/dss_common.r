@@ -406,30 +406,39 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
         print(p)
     })
 
-    return(list(dmx_dt = dmx_dt, plot = p)) 
+    return(list(dmx_dt = dmx_dt, plot = p))
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     tumour_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
     control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-    
-    plot_width <- 30 
-    plot_height <- 15
-    
+
+    plot_width <- 12 # Adjusted width
+    plot_height <- 10 # Adjusted height
+
     safe_plot(filename, function() {
-        par(mfrow=c(1,2), mar=c(4,4,5,2))
-        
+        # Set up a 3x1 layout: title, tumour samples, control samples
+        layout(matrix(c(1, 2, 3), nrow = 3, ncol = 1), heights = c(1, 4, 4))
+
+        # Plot title
+        par(mar = c(0, 4, 2, 2))
+        plot.new()
+        title(
+            main = sprintf(
+                "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
+            ),
+            cex.main = 1.2
+        )
+
         # Plot tumour samples
+        par(mar = c(4, 4, 2, 2))
         showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
-        title("Tumour Samples", line = 1)
-        
+        title("Tumour Samples", line = 0.5)
+
         # Plot control samples
+        par(mar = c(4, 4, 2, 2))
         showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
-        title("Control Samples", line = 1)
-        
-        # Add overall title
-        mtext(sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                      i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
-              outer = TRUE, line = -2, cex = 1.2)
+        title("Control Samples", line = 0.5)
     }, width = plot_width, height = plot_height)
 }

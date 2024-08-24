@@ -64,7 +64,11 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
-    plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
+    tryCatch({
+      plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
+    }, error = function(e) {
+      print(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
+    })
   }
   print(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
 }
