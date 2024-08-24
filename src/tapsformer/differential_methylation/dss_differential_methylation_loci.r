@@ -199,7 +199,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     n_iterations = n_iterations,
     subsample_fraction = subsample_fraction,
     delta = delta, p.threshold = p.threshold,
-    fdr.threshold = fdr.threshold, smoothing = smoothing_for_dmltest
+    fdr.threshold = fdr.threshold, smoothing = smoothing
   )
   saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
 
