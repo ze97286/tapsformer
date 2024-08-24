@@ -410,41 +410,58 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
+    print("Starting plot_single_dmr function")
+    
     # Determine the number of samples in each group
     tumour_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
     control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-    num_tumour <- length(tumour_samples)
-    num_control <- length(control_samples)
-
+    
+    print(paste("Number of tumour samples:", length(tumour_samples)))
+    print(paste("Number of control samples:", length(control_samples)))
+    
     # Calculate layout dimensions
-    ncol <- max(num_tumour, num_control)
-    plot_width <- min(30, max(16, ncol * 3))  # Adjust width based on number of samples
-    plot_height <- 20  # Fixed height for two rows
-
+    plot_width <- 20  # Fixed width
+    plot_height <- 15  # Fixed height
+    
+    print(paste("Plot dimensions:", plot_width, "x", plot_height))
+    
     safe_plot(filename, function() {
-        layout(matrix(c(1,2,3,3), nrow=4, ncol=1), heights=c(1,9,9,1))
+        print("Inside safe_plot function")
         
-        # Title
-        par(mar=c(0,0,2,0))
-        plot.new()
-        title(main = sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                             i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
-              cex.main = 1.2)
-
-        # Tumour samples
-        par(mar=c(4,4,2,2))
-        showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
+        # Set up a 2x1 layout
+        layout(matrix(c(1,2), nrow=2, ncol=1), heights=c(1,1))
+        print("Layout set")
+        
+        # Plot tumour samples
+        print("Plotting tumour samples")
+        par(mar=c(4,4,4,2))
+        tryCatch({
+            showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
+            print("Tumour samples plotted successfully")
+        }, error = function(e) {
+            print(paste("Error plotting tumour samples:", conditionMessage(e)))
+        })
         title("Tumour Samples", line = 0.5)
-
-        # Control samples
-        par(mar=c(4,4,2,2))
-        showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
+        
+        # Plot control samples
+        print("Plotting control samples")
+        par(mar=c(4,4,4,2))
+        tryCatch({
+            showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
+            print("Control samples plotted successfully")
+        }, error = function(e) {
+            print(paste("Error plotting control samples:", conditionMessage(e)))
+        })
         title("Control Samples", line = 0.5)
-
-        # Legend
-        par(mar=c(0,0,0,0))
-        plot.new()
-        legend("center", c("Methylation level", "Smoothed methylation"), 
-               col=c("black", "red"), lty=1, horiz=TRUE, bty="n")
+        
+        # Add overall title
+        print("Adding overall title")
+        mtext(sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                      i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
+              outer = TRUE, line = -2, cex = 1.2)
+        
+        print("Finished plotting")
     }, width = plot_width, height = plot_height)
+    
+    print(paste("Plot saved as", filename))
 }
