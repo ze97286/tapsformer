@@ -121,15 +121,15 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   # Calculate more stringent p-values for DMRs
   setkey(filtered_dmls, chr, pos)
 
-  get_min_pval <- function(dmr) {
-    pvals <- filtered_dmls[.(dmr$chr, dmr$start:dmr$end), on = .(chr, pos), nomatch = 0]$pval
+  get_min_pval <- function(dmr_row) {
+    pvals <- filtered_dmls[.(dmr_row[["chr"]], dmr_row[["start"]]:dmr_row[["end"]]), on = .(chr, pos), nomatch = 0]$pval
     if (length(pvals) == 0) {
       return(NA)
     }
     min(pvals, na.rm = TRUE)
   }
 
-  dmr_dt[, pval := sapply(.SD, get_min_pval), .SDcols = names(dmr_dt)]
+  dmr_dt[, pval := apply(.SD, 1, get_min_pval)]
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
 
   # Apply stringent filters to DMRs
