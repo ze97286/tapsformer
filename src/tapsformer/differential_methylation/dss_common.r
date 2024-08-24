@@ -419,27 +419,30 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
     print(sprintf("Samples: %s", paste(sample_names, collapse = ", ")))
 
     # Set plot dimensions
-    plot_width <- 10 # Consistent width
-    plot_height <- max(5, num_samples * 0.8) # Dynamic height: at least 5, or more depending on number of samples
+    plot_width <- 10  # Fixed width
+    plot_height <- max(10, num_samples * 2)  # Dynamic height based on number of samples
 
     tryCatch(
         {
-            safe_plot(filename, function() {
-                # Set up a layout with one plot per row
-                par(mfrow = c(num_samples, 1))
-                par(mar = c(5, 5, 2, 2)) # Set margins for readability
+            # Open a new SVG device for the entire plot
+            svglite::svglite(filename, width = plot_width, height = plot_height)
 
-                # Plot all samples in one column
-                for (sample in sample_names) {
-                    print(sprintf("Plotting sample: %s...", sample))
-                    showOneDMR(dmr, combined_bsseq[, sample], ext = ext)
-                    title(sample, line = 0.5, cex.main = 1.2)
-                    print(sprintf("Sample %s plotted successfully.", sample))
-                }
+            # Plot each sample one by one, without setting up a multi-panel layout
+            for (sample in sample_names) {
+                print(sprintf("Plotting sample: %s...", sample))
 
-                # Reset graphical parameters to default after plotting
-                par(mfrow = c(1, 1))
-            }, width = plot_width, height = plot_height)
+                # Set up a new plot area for each sample
+                plot.new()
+                par(mar = c(5, 4, 4, 2) + 0.1)  # Reset margins for each plot
+                
+                # Call showOneDMR for the sample
+                showOneDMR(dmr, combined_bsseq[, sample], ext = ext)
+                title(main = sample, line = 1, cex.main = 1.2)
+                print(sprintf("Sample %s plotted successfully.", sample))
+            }
+
+            # Close the SVG device
+            dev.off()
 
             print(sprintf("Plot saved to %s", filename))
         },
@@ -449,3 +452,4 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
         }
     )
 }
+Ï
