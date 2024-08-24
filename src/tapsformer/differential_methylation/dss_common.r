@@ -419,8 +419,8 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
     print(sprintf("Samples: %s", paste(sample_names, collapse = ", ")))
 
     # Set plot dimensions
-    plot_width <- 10  # Fixed width
-    plot_height <- max(10, num_samples * 2)  # Dynamic height based on number of samples
+    plot_width <- 10 # Fixed width
+    plot_height <- max(10, num_samples * 2) # Dynamic height based on number of samples
 
     tryCatch(
         {
@@ -433,8 +433,7 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
 
                 # Set up a new plot area for each sample
                 plot.new()
-                par(mar = c(5, 4, 4, 2) + 0.1)  # Reset margins for each plot
-                
+                par(mar = c(5, 4, 4, 2) + 0.1) # Reset margins for each plot
                 # Call showOneDMR for the sample
                 showOneDMR(dmr, combined_bsseq[, sample], ext = ext)
                 title(main = sample, line = 1, cex.main = 1.2)
@@ -452,4 +451,3 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
         }
     )
 }
-Ï
