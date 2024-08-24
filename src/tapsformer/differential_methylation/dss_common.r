@@ -38,7 +38,7 @@ suppressMessages(library(TxDb.Hsapiens.UCSC.hg38.knownGene))
 suppressMessages(library(AnnotationHub))
 
 test_logging <- function() {
-    flog.info("This is a test log message.", name = "dss_logger")
+    print("This is a test log message.")
 }
 
 # Setup function for safe saving of svg plots to the output dir
@@ -48,11 +48,11 @@ safe_plot <- function(filename, plot_func, width = 10, height = 8) {
             svglite::svglite(filename, width = width, height = height)
             plot_func()
             dev.off()
-            flog.info(paste("Plot saved as", filename), name = "dss_logger")
+            print(paste("Plot saved as", filename))
         },
         error = function(e) {
             if (dev.cur() > 1) dev.off() # Close device if open
-            flog.error(paste("Error creating plot:", filename, "-", conditionMessage(e)), name = "dss_logger")
+            print(paste("Error creating plot:", filename, "-", conditionMessage(e)))
         }
     )
 }
@@ -137,7 +137,7 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir) 
 # Volcano plot
 create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir) {
     if (pval_col %in% names(dmx_dt)) {
-        flog.info("Creating volcano plot", name = "dss_logger")
+        print("Creating volcano plot")
         safe_plot(
             file.path(output_dir, "volcano_plot.svg"),
             function() {
@@ -159,14 +159,14 @@ create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir) {
         )
         return(TRUE)
     } else {
-        flog.warn("Skipping volcano plot due to missing p-value column", name = "dss_logger")
+        print("Skipping volcano plot due to missing p-value column")
         return(FALSE)
     }
 }
 
 # Methylation difference distribution plot
 create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir) {
-    flog.info("Creating methylation difference distribution plot", name = "dss_logger")
+    print("Creating methylation difference distribution plot")
     safe_plot(
         file.path(output_dir, "methylation_difference_distribution.svg"),
         function() {
@@ -185,7 +185,7 @@ create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir) {
 }
 
 create_dmr_length_plot <- function(dmx_dt, output_dir) {
-    flog.info("Creating DMR length distribution plot", name = "dss_logger")
+    print("Creating DMR length distribution plot")
     safe_plot(
         file.path(output_dir, "dmr_length_distribution.svg"),
         function() {
@@ -205,7 +205,7 @@ create_dmr_length_plot <- function(dmx_dt, output_dir) {
 
 # dmx by chromosome plot
 create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
-    flog.info("Creating chromosome coverage plot", name = "dss_logger")
+    print("Creating chromosome coverage plot")
 
     # Create a data frame with chromosome sizes
     chr_sizes <- data.frame(
@@ -261,7 +261,7 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
 
 # Manhattan plot
 create_manhattan_plot <- function(dmx_dt, output_dir) {
-    flog.info("Creating Manhattan plot", name = "dss_logger")
+    print("Creating Manhattan plot")
     # Create a data frame with chromosome sizes
     chr_sizes <- data.frame(
         chr = paste0("chr", c(1:22, "X", "Y")),
@@ -308,7 +308,7 @@ create_manhattan_plot <- function(dmx_dt, output_dir) {
 
 # Q-Q Plot
 create_qq_plot <- function(dmx_dt, output_dir) {
-    flog.info("Creating Q-Q plot", name = "dss_logger")
+    print("Creating Q-Q plot")
     safe_plot(
         file.path(output_dir, "qq_plot.svg"),
         function() {
@@ -332,7 +332,7 @@ create_qq_plot <- function(dmx_dt, output_dir) {
 
 # Pie chart of genomic context of differentially methylated regions/loci
 create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
-    flog.info("Annotating regions with genomic context", name = "dss_logger")
+    print("Annotating regions with genomic context")
     if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
         dmx_dt[, start := pos]
         dmx_dt[, end := pos + 2]
@@ -380,7 +380,7 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
             dmx_annotation$Enhancer <- overlapsAny(dmx_gr, enhancers)
         },
         error = function(e) {
-            flog.warn("Failed to fetch enhancer data. Skipping enhancer annotation.", name = "dss_logger")
+            print("Failed to fetch enhancer data. Skipping enhancer annotation.")
             dmx_annotation$Enhancer <- FALSE
         }
     )

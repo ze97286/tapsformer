@@ -149,7 +149,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   print(sprintf("Identified %d high-confidence hypomethylated DMRs", nrow(top_hypo_dmrs)))
 
   if (nrow(top_hypo_dmrs) == 0) {
-    flog.error("No high-confidence hypomethylated DMRs found. Stopping analysis.")
+    print("No high-confidence hypomethylated DMRs found. Stopping analysis.")
     return(NULL)
   }
 
