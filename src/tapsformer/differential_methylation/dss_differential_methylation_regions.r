@@ -71,99 +71,85 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 
 # this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
 # saving the output and visualisations.
-perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, n_iterations = 5, subsample_fraction = 0.8) {
+perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
-    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_robust",
+    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
     delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  print("Performing robust DMR analysis")
+  print("Performing DMR analysis with DML pre-filtering")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # Perform initial DMR analysis on full dataset
-  print("Performing initial DMR analysis on full dataset")
+  # Perform DMLtest
+  print("Performing DMLtest")
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
-  dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
-  initial_dmr_count <- nrow(dmrs)
-  print(sprintf("Initial analysis found %d DMRs", initial_dmr_count))
 
-  # Function to assess individual DMR robustness
-  assess_dmr_robustness <- function(dmr_row, dmr_index) {
-    chr <- dmr_row$chr
-    start <- dmr_row$start
-    end <- dmr_row$end
+  # Convert DMLtest results to data.table for filtering
+  dml_dt <- as.data.table(dml_test)
 
-    print(sprintf("Assessing robustness for DMR %d: %s:%d-%d", dmr_index, chr, start, end))
+  # Apply filters similar to DML analysis
+  z_score <- qnorm(0.975) # Two-tailed 95% CI
+  dml_dt[, `:=`(
+    hypo_in_tumour = diff < 0,
+    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
+    mean_methylation_diff = abs(diff),
+    ci_excludes_zero = sign(diff - (z_score * diff.se)) == sign(diff + (z_score * diff.se))
+  )]
 
-    robustness_score <- 0
-    for (i in 1:n_iterations) {
-      print(sprintf("  Iteration %d/%d for DMR %d", i, n_iterations, dmr_index))
+  # Filter DMLs
+  filtered_dmls <- dml_dt[
+    hypo_in_tumour == TRUE &
+      significant_after_fdr == TRUE &
+      mean_methylation_diff >= delta &
+      ci_excludes_zero == TRUE
+  ]
 
-      subsample1 <- sample(group1, floor(length(group1) * 0.8))
-      subsample2 <- sample(group2, floor(length(group2) * 0.8))
-      subsample <- c(subsample1, subsample2)
+  print(sprintf("Filtered DMLs: %d out of %d", nrow(filtered_dmls), nrow(dml_dt)))
 
-      print(sprintf("    Subsampled %d tumour and %d control samples", length(subsample1), length(subsample2)))
+  # Call DMRs using filtered DMLs
+  print("Calling DMRs on filtered DMLs")
+  dmrs <- callDMR(filtered_dmls, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
 
-      sub_dml_test <- DMLtest(combined_bsseq[, subsample],
-        group1 = subsample1, group2 = subsample2, smoothing = smoothing
-      )
-      sub_dmrs <- callDMR(sub_dml_test,
-        delta = delta, p.threshold = p.threshold,
-        minlen = min.len, minCG = min.CpG, dis.merge = dis.merge
-      )
+  print(sprintf("Initial DMR analysis found %d DMRs", nrow(dmrs)))
 
-      print(sprintf("    Found %d DMRs in this iteration", nrow(sub_dmrs)))
-
-      if (any(sub_dmrs$chr == chr & sub_dmrs$start <= end & sub_dmrs$end >= start)) {
-        robustness_score <- robustness_score + 1
-        print(sprintf("    DMR %d found in iteration %d", dmr_index, i))
-      } else {
-        print(sprintf("    DMR %d not found in iteration %d", dmr_index, i))
-      }
-    }
-    final_score <- robustness_score / n_iterations
-    print(sprintf("  Final robustness score for DMR %d: %.2f", dmr_index, final_score))
-    return(final_score)
-  }
-
-  # Assess robustness for each DMR
-  print("Assessing robustness of individual DMRs")
+  # Convert to data.table for further processing
   dmr_dt <- as.data.table(dmrs)
-  dmr_dt[, robustness_score := sapply(1:nrow(dmr_dt), function(i) assess_dmr_robustness(dmr_dt[i, ], i))]
 
-  # Calculate p-values and FDR
-  dml_results <- as.data.table(dml_test)
-  setkey(dml_results, chr, pos)
+  # Calculate more stringent p-values for DMRs
+  setkey(filtered_dmls, chr, pos)
 
   get_min_pval <- function(dmr) {
-    pvals <- dml_results[.(dmr$chr, dmr$start:dmr$end), on = .(chr, pos), nomatch = 0]$pval
+    pvals <- filtered_dmls[.(dmr$chr, dmr$start:dmr$end), on = .(chr, pos), nomatch = 0]$pval
     if (length(pvals) == 0) {
       return(NA)
     }
     min(pvals, na.rm = TRUE)
   }
-  dmr_dt[, pval := sapply(split(dmr_dt, 1:nrow(dmr_dt)), get_min_pval)]
+
+  dmr_dt[, pval := sapply(.SD, get_min_pval), .SDcols = names(dmr_dt)]
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
+
+  # Apply stringent filters to DMRs
   dmr_dt[, `:=`(
     hypo_in_tumour = diff.Methy < 0,
-    significant_after_fdr = fdr < fdr.threshold
+    significant_after_fdr = fdr < fdr.threshold,
+    high_areaStat = areaStat > quantile(areaStat, 0.75) # Top 25% by areaStat
   )]
 
   # Select top hypomethylated DMRs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE &
     significant_after_fdr == TRUE &
-    robustness_score >= 0.8]
+    high_areaStat == TRUE]
 
-  setorder(top_hypo_dmrs, -robustness_score, -areaStat)
+  setorder(top_hypo_dmrs, -areaStat)
 
-  print(sprintf("Identified %d robust hypomethylated DMRs", nrow(top_hypo_dmrs)))
+  print(sprintf("Identified %d high-confidence hypomethylated DMRs", nrow(top_hypo_dmrs)))
 
   if (nrow(top_hypo_dmrs) == 0) {
-    flog.error("No robust hypomethylated DMRs found. Stopping analysis.")
+    flog.error("No high-confidence hypomethylated DMRs found. Stopping analysis.")
     return(NULL)
   }
 
@@ -177,8 +163,8 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )]
 
   # Save output
-  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength, robustness_score)],
-    file.path(output_dir, "hypomethylated_dmrs.bed"),
+  fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
+    file.path(output_dir, "high_confidence_hypomethylated_dmrs.bed"),
     sep = "\t"
   )
 
