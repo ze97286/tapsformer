@@ -410,87 +410,41 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
 }
 
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
-    # Determine the number of samples in the combined_bsseq object
-    num_samples <- length(sampleNames(combined_bsseq))
+    # Determine the number of samples in each group
+    tumour_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
+    control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+    num_tumour <- length(tumour_samples)
+    num_control <- length(control_samples)
 
-    # Adjust margins and text size based on the number of samples
-    if (num_samples > 20) {
-        mar <- c(4, 4, 2, 2) + 0.1 # Smaller margins for larger sample sizes
-        cex_main <- 0.6 # Smaller text for large sample sizes
-        plot_width <- 20
-        plot_height <- 14
-    } else if (num_samples > 10) {
-        mar <- c(5, 4, 3, 2) + 0.1
-        cex_main <- 0.7
-        plot_width <- 18
-        plot_height <- 12
-    } else {
-        mar <- c(7, 4, 4, 2) + 0.1 # Larger margins for fewer samples
-        cex_main <- 0.8
-        plot_width <- 16
-        plot_height <- 12
-    }
+    # Calculate layout dimensions
+    ncol <- max(num_tumour, num_control)
+    plot_width <- min(30, max(16, ncol * 3))  # Adjust width based on number of samples
+    plot_height <- 20  # Fixed height for two rows
 
     safe_plot(filename, function() {
-        tryCatch(
-            {
-                par(mar = mar)
-                showOneDMR(dmr, combined_bsseq, ext = ext)
-                title(
-                    main = sprintf(
-                        "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-                        i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-                    ),
-                    cex.main = cex_main,
-                    line = 2
-                )
-            },
-            error = function(e) {
-                flog.error(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)), name = "dss_logger")
-                plot(1, type = "n", xlab = "", ylab = "", main = sprintf("Error plotting DMR %d", i))
-                text(1, 1, labels = conditionMessage(e), cex = 0.8, col = "red")
-            }
-        )
-    }, width = plot_width, height = plot_height) # Use dynamically adjusted dimensions
-}
+        layout(matrix(c(1,2,3,3), nrow=4, ncol=1), heights=c(1,9,9,1))
+        
+        # Title
+        par(mar=c(0,0,2,0))
+        plot.new()
+        title(main = sprintf("DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
+                             i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat),
+              cex.main = 1.2)
 
-plot_single_dmr_faceted <- function(filename, dmr, combined_bsseq, i, ext) {
-    num_samples <- length(sampleNames(combined_bsseq))
-    ncol <- min(5, ceiling(sqrt(num_samples)))
-    nrow <- ceiling(num_samples / ncol)
-    plot_list <- list()
+        # Tumour samples
+        par(mar=c(4,4,2,2))
+        showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
+        title("Tumour Samples", line = 0.5)
 
-    for (sample in sampleNames(combined_bsseq)) {
-        p <- tryCatch(
-            {
-                plotRegion(combined_bsseq[, sample],
-                    region = GRanges(
-                        seqnames = dmr$chr,
-                        ranges = IRanges(start = dmr$start - ext, end = dmr$end + ext)
-                    ),
-                    extend = 0,
-                    main = sample
-                )
-            },
-            error = function(e) {
-                ggplot() +
-                    annotate("text", x = 1, y = 1, label = paste("Error:", conditionMessage(e)), color = "red") +
-                    theme_void()
-            }
-        )
-        plot_list[[sample]] <- p
-    }
+        # Control samples
+        par(mar=c(4,4,2,2))
+        showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
+        title("Control Samples", line = 0.5)
 
-    combined_plot <- do.call(gridExtra::grid.arrange, c(plot_list, ncol = ncol))
-    title <- grid::textGrob(
-        sprintf(
-            "DMR %d: %s:%d-%d\nStrength: %s, areaStat: %.2f",
-            i, dmr$chr, dmr$start, dmr$end, dmr$hypomethylation_strength, dmr$areaStat
-        ),
-        gp = gpar(fontface = "bold")
-    )
-
-    final_plot <- gridExtra::grid.arrange(title, combined_plot, heights = c(2, 30))
-    ggsave(filename, final_plot, width = 20, height = 4 * nrow, limitsize = FALSE)
-    flog.info(paste("Plot saved as", filename), name = "dss_logger")
+        # Legend
+        par(mar=c(0,0,0,0))
+        plot.new()
+        legend("center", c("Methylation level", "Smoothed methylation"), 
+               col=c("black", "red"), lty=1, horiz=TRUE, bty="n")
+    }, width = plot_width, height = plot_height)
 }
