@@ -413,15 +413,15 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
     tumour_samples <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
     control_samples <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-    plot_width <- 12 # Adjusted width
-    plot_height <- 10 # Adjusted height
+    plot_width <- 15 # Increased width for side-by-side plots
+    plot_height <- 10
 
     safe_plot(filename, function() {
-        # Set up a 3x1 layout: title, tumour samples, control samples
-        layout(matrix(c(1, 2, 3), nrow = 3, ncol = 1), heights = c(1, 4, 4))
+        # Set up a 2x2 layout: title, tumour, control, legend
+        layout(matrix(c(1, 1, 2, 3, 4, 4), nrow = 3, ncol = 2, byrow = TRUE), heights = c(1, 4, 1))
 
-        # Plot title
-        par(mar = c(0, 4, 2, 2))
+        # Overall title
+        par(mar = c(0, 0, 2, 0))
         plot.new()
         title(
             main = sprintf(
@@ -431,14 +431,21 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext) {
             cex.main = 1.2
         )
 
-        # Plot tumour samples
+        # Tumour samples
         par(mar = c(4, 4, 2, 2))
         showOneDMR(dmr, combined_bsseq[, tumour_samples], ext = ext)
         title("Tumour Samples", line = 0.5)
 
-        # Plot control samples
+        # Control samples
         par(mar = c(4, 4, 2, 2))
         showOneDMR(dmr, combined_bsseq[, control_samples], ext = ext)
         title("Control Samples", line = 0.5)
+
+        # Legend
+        par(mar = c(0, 0, 0, 0))
+        plot.new()
+        legend("center", c("Methylation level", "Smoothed methylation"),
+            col = c("black", "red"), lty = 1, horiz = TRUE, bty = "n"
+        )
     }, width = plot_width, height = plot_height)
 }

@@ -94,29 +94,38 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 
   tryCatch(
     {
-      # Open a new svg device with larger size
-      svglite::svglite(output_filename, width = 15, height = 10) # Adjust width and height for larger rectangles
+      # Calculate optimal number of columns based on the number of loci
+      num_loci <- nrow(top_hypo_dmls)
+      num_samples <- length(sample_names)
+      ncol <- min(10, num_loci) # Use 10 as max columns, or fewer if less than 10 loci
+
+      # Calculate the number of rows required
+      nrow <- ceiling(num_loci / ncol)
+
+      # Adjust plot dimensions based on the number of rows and columns
+      plot_width <- max(15, ncol * 1.5) # Width scales with the number of columns
+      plot_height <- max(10, nrow * 1.2) # Height scales with the number of rows
 
       # Generate the plot
+      svglite::svglite(output_filename, width = plot_width, height = plot_height)
+
       plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
         geom_point(size = 2) +
-        facet_wrap(~ chr + pos, scales = "free_y", ncol = 10) + # Set grid layout to 10 columns
+        facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) + # Dynamic ncol based on num_loci
         theme_bw() +
         labs(
           title = "Methylation Levels Across Samples for Each DML",
           x = "Sample", y = "Methylation Level"
         ) +
-        scale_shape_manual(values = c(Tumour = 16, Control = 1)) + # Full circle for Tumour, open circle for Control
-        scale_color_manual(values = c(Tumour = "blue", Control = "red")) + # Blue for Tumour, Red for Control
+        scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
+        scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
         theme(
           axis.text.x = element_text(angle = 90, hjust = 1),
-          strip.text = element_text(size = 12), # Increase strip text size for readability
-          plot.margin = unit(c(1, 1, 1, 1), "cm") # Adjust margins if needed
+          strip.text = element_text(size = 12), # Adjust if needed
+          plot.margin = unit(c(1, 1, 1, 1), "cm")
         )
 
-      print(plot) # Ensure the plot is rendered
-
-      # Close the svg device
+      print(plot)
       dev.off()
     },
     error = function(e) {
@@ -148,7 +157,7 @@ sliding_window_filter <- function(dmls, window_size, min_cpgs = 3, consistency_t
   dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
 }
 
-cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 10, subsample_fraction = 0.8,
+cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 5, subsample_fraction = 0.8,
                                 delta, p.threshold, fdr.threshold, smoothing) {
   all_dmls <- list()
 
@@ -270,7 +279,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )
 
   print("Creating visualizations")
-  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 500)
+  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 50)
   str(strongest_dmls)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
   create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir)
