@@ -188,7 +188,7 @@ cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 5, su
 # this is the core function here, doing the DML analysis choosing hypomethylated DMLs and
 # saving the output and visualisations.
 perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold,
-                                 min_coverage, window_size, smoothing, cl, n_iterations = 10,
+                                 min_coverage, window_size, smoothing, cl, n_iterations = 5,
                                  subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
