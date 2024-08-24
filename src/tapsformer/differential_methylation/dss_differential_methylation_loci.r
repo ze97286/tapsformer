@@ -256,7 +256,7 @@ perform_dml_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   )
 
   flog.info("Creating visualizations", name = "dss_logger")
-  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 50)
+  strongest_dmls <- tail(top_hypo_dmls[order(top_hypo_dmls$stat), ], 500)
   str(strongest_dmls)
   plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
   create_volcano_plot(dml_dt, diff_col = "diff", pval_col = "pval", output_dir)
