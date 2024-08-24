@@ -74,37 +74,29 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, n_iterations = 5, subsample_fraction = 0.8) {
   smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
   output_dir <- file.path(base_dir, sprintf(
-    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_cv",
+    "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_bootstrap",
     delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
   ))
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  flog.info("Performing DMR test with cross-validation", name = "dss_logger")
+  print("Performing DMR analysis with bootstrapping")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # Cross-validation function
-  cross_validate_dmrs <- function(iteration) {
+  # Bootstrapping function
+  bootstrap_dmrs <- function(iteration) {
     tryCatch(
       {
-        flog.info(sprintf("Cross-validation iteration %d/%d", iteration, n_iterations), name = "dss_logger")
+        print(sprintf("Bootstrap iteration %d/%d", iteration, n_iterations))
 
-        # Subsample from each group
-        subsample1 <- sample(group1, length(group1) * subsample_fraction)
-        subsample2 <- sample(group2, length(group2) * subsample_fraction)
-        subsample <- c(subsample1, subsample2)
+        # Bootstrap samples with replacement
+        bootstrap1 <- sample(group1, length(group1), replace = TRUE)
+        bootstrap2 <- sample(group2, length(group2), replace = TRUE)
 
-        flog.info(sprintf("Subsampled %d samples", length(subsample)), name = "dss_logger")
-
-        sub_bsseq <- combined_bsseq[, subsample]
-
-        flog.info("Running DMLtest", name = "dss_logger")
-        dml_test <- DMLtest(sub_bsseq, group1 = subsample1, group2 = subsample2, smoothing = smoothing)
-
-        flog.info("Calling DMRs", name = "dss_logger")
+        dml_test <- DMLtest(combined_bsseq, group1 = bootstrap1, group2 = bootstrap2, smoothing = smoothing)
         dmrs <- callDMR(dml_test, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
 
-        flog.info(sprintf("Found %d DMRs in iteration %d", nrow(dmrs), iteration), name = "dss_logger")
+        print(sprintf("Found %d DMRs in iteration %d", nrow(dmrs), iteration))
 
         return(as.data.table(dmrs)[, .(chr, start, end)])
       },
@@ -115,22 +107,24 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
     )
   }
 
-  # Perform cross-validation
-  flog.info("Starting cross-validation", name = "dss_logger")
-  cv_results <- lapply(1:n_iterations, cross_validate_dmrs) # Using lapply instead of parLapply for debugging
+  # Perform bootstrapping
+  flog.info("Starting bootstrapping", name = "dss_logger")
+  bootstrap_results <- lapply(1:n_iterations, bootstrap_dmrs)
 
   # Remove NULL results
-  cv_results <- cv_results[!sapply(cv_results, is.null)]
+  bootstrap_results <- bootstrap_results[!sapply(bootstrap_results, is.null)]
 
-  if (length(cv_results) == 0) {
-    flog.error("No valid results from cross-validation. Stopping analysis.", name = "dss_logger")
+  if (length(bootstrap_results) == 0) {
+    flog.error("No valid results from bootstrapping. Stopping analysis.", name = "dss_logger")
     return(NULL)
   }
 
-  # Identify consistent DMRs
-  flog.info("Identifying consistent DMRs", name = "dss_logger")
-  consistent_dmrs <- Reduce(function(x, y) merge(x, y, by = c("chr", "start", "end")), cv_results)
-  flog.info(sprintf("Identified %d consistent DMRs across %d valid iterations", nrow(consistent_dmrs), length(cv_results)), name = "dss_logger")
+  # Identify consistent DMRs (present in at least 50% of bootstrap iterations)
+  all_dmrs <- rbindlist(bootstrap_results)
+  dmr_counts <- all_dmrs[, .N, by = .(chr, start, end)]
+  consistent_dmrs <- dmr_counts[N >= (n_iterations * 0.5)]
+
+  flog.info(sprintf("Identified %d consistent DMRs across %d valid iterations", nrow(consistent_dmrs), length(bootstrap_results)), name = "dss_logger")
 
   if (nrow(consistent_dmrs) == 0) {
     flog.error("No consistent DMRs found. Stopping analysis.", name = "dss_logger")
@@ -144,7 +138,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
   dmr_dt <- as.data.table(dmrs)
 
   # Filter for consistent DMRs
-  dmr_dt <- merge(dmr_dt, consistent_dmrs, by = c("chr", "start", "end"))
+  dmr_dt <- merge(dmr_dt, consistent_dmrs[, .(chr, start, end)], by = c("chr", "start", "end"))
 
   if (nrow(dmr_dt) == 0) {
     flog.error("No DMRs remain after filtering for consistency. Stopping analysis.", name = "dss_logger")
