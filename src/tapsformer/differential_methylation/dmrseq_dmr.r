@@ -82,7 +82,6 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 
 
 perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
-                                    testCovariate = "condition",
                                     cutoff = 0.05,
                                     beta_threshold = -0.4, # For hypomethylation
                                     minNumRegion = 5,
@@ -93,12 +92,13 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
 
   # Create condition vector
   condition <- factor(ifelse(grepl("tumour_", sampleNames(combined_bsseq)), "tumour", "control"))
-
+  colData(combined_bsseq)$condition <- condition
+  
   # Run DMRseq
   dmrs <- dmrseq(
     bs = combined_bsseq,
     cutoff = cutoff,
-    testCovariate = testCovariate,
+    testCovariate = "condition",
     minNumRegion = minNumRegion,
     maxGap = maxGap,
   )
