@@ -409,38 +409,102 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
     return(list(dmx_dt = dmx_dt, plot = p))
 }
 
-plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
-    # Extracting sample names (both tumour and control)
-    sample_names <- sampleNames(combined_bsseq)
-    num_samples <- length(sample_names)
 
-    # Debugging prints
+showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, ylim = c(0, 1)) {
+    ## get chr, position and counts
+    allchr <- as.character(seqnames(BSobj))
+    allpos <- start(BSobj)
+    X <- getBSseq(BSobj, "M")
+    N <- getBSseq(BSobj, "Cov")
+
+    ## locate the data for plotting
+    chr <- as.character(OneDMR$chr)
+    ix.chr <- which(allchr == chr)
+    thispos <- allpos[ix.chr]
+    thisN <- N[ix.chr, ]
+    thisX <- X[ix.chr, ]
+    xlim <- c(OneDMR$start - ext, OneDMR$end + ext)
+    ix1 <- which(thispos <= xlim[2] & thispos >= xlim[1])
+
+    ## separate samples based on prefixes
+    sNames <- sampleNames(BSobj)
+    prefix1_samples <- grep(paste0("^", prefix1), sNames, value = TRUE)
+    prefix2_samples <- grep(paste0("^", prefix2), sNames, value = TRUE)
+
+    nSample1 <- length(prefix1_samples)
+    nSample2 <- length(prefix2_samples)
+    nSample <- max(nSample1, nSample2)
+
+    if (nSample > 2) {
+        y.cex <- 0.66
+    } else {
+        y.cex <- 1
+    }
+
+    par(mfrow = c(nSample, 2), mar = c(2.5, 2.5, 1.6, 2.5), mgp = c(1.5, 0.5, 0))
+    thisP <- thisX / thisN
+
+    plotSample <- function(sample_name, column) {
+        i <- which(sNames == sample_name)
+        plot(thispos[ix1], thisP[ix1, i],
+            type = "h", col = "blue", axes = F, lwd = 1.5,
+            xlab = "", ylab = "", ylim = ylim, xlim = xlim,
+            main = sample_name
+        )
+        box(col = "black")
+        axis(1, )
+        axis(2, col = "blue", col.axis = "blue")
+        mtext(chr, side = 1, line = 1.33, cex = y.cex)
+        mtext("methyl%", side = 2, line = 1.33, col = "blue", cex = y.cex)
+
+        thisN.norm <- thisN[ix1, i] / max(thisN[ix1, ]) * ylim[2]
+        lines(thispos[ix1], thisN.norm, type = "l", col = "gray", lwd = 1.5)
+        axis(
+            side = 4, at = seq(0, ylim[2], length.out = 5),
+            labels = round(seq(0, max(thisN[ix1, ]), length.out = 5))
+        )
+        mtext("read depth", side = 4, line = 1.33, cex = y.cex)
+
+        rect(OneDMR$start, ylim[1], OneDMR$end, ylim[2], col = "#FF00001A", border = NA)
+    }
+
+    for (i in 1:nSample) {
+        if (i <= nSample1) {
+            plotSample(prefix1_samples[i], 1)
+        } else {
+            plot.new() # empty plot if no more samples for prefix1
+        }
+
+        if (i <= nSample2) {
+            plotSample(prefix2_samples[i], 2)
+        } else {
+            plot.new() # empty plot if no more samples for prefix2
+        }
+    }
+}
+
+
+plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
+    # Debugging prints to track progress
     print(sprintf("Processing DMR %d: %s:%d-%d with ext = %d", i, dmr$chr, dmr$start, dmr$end, ext))
-    print(sprintf("Samples: %s", paste(sample_names, collapse = ", ")))
 
     # Set plot dimensions
     plot_width <- 10 # Fixed width
-    plot_height <- max(10, num_samples * 2) # Dynamic height based on number of samples
+    plot_height <- 5 # Fixed height (adjust if necessary)
 
     tryCatch(
         {
-            # Open a new SVG device for the entire plot
+            # Open a new SVG device for plotting the DMR
             svglite::svglite(filename, width = plot_width, height = plot_height)
 
-            # Plot each sample one by one, without setting up a multi-panel layout
-            for (sample in sample_names) {
-                print(sprintf("Plotting sample: %s...", sample))
+            # Reset graphical parameters to ensure a fresh start
+            par(mar = c(5, 4, 4, 2) + 0.1)
 
-                # Set up a new plot area for each sample
-                plot.new()
-                par(mar = c(5, 4, 4, 2) + 0.1) # Reset margins for each plot
-                # Call showOneDMR for the sample
-                showOneDMR(dmr, combined_bsseq[, sample], ext = ext)
-                title(main = sample, line = 1, cex.main = 1.2)
-                print(sprintf("Sample %s plotted successfully.", sample))
-            }
+            # Call showOneDMR to plot the DMR across all samples
+            showOneDMRTwoPrefixes(dmr, combined_bsseq, "tumour", "control", ext = ext)
+            title(main = sprintf("DMR %d: %s:%d-%d", i, dmr$chr, dmr$start, dmr$end), line = 1, cex.main = 1.2)
 
-            # Close the SVG device
+            # Close the device after plotting
             dev.off()
 
             print(sprintf("Plot saved to %s", filename))

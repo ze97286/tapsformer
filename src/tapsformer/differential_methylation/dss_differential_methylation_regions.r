@@ -174,9 +174,12 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, delta, p.threshold, f
 
   print(table(top_hypo_dmrs$hypomethylation_strength))
 
+  saveRDS(top_hypo_dmrs, file.path(output_dir, "top_hypo_dmrs.rds"))
+  saveRDS(combined_bsseq, file.path(output_dir, "combined_bsseq.rds"))
+
   # Visualizations
   print("Creating visualizations")
-  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 50)
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 10)
   create_volcano_plot(dmr_dt, diff_col = "diff.Methy", pval_col = "pval", output_dir)
   create_methylation_diff_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
   create_chromosome_coverage_plot(dmr_dt, diff_col = "diff.Methy", output_dir)
