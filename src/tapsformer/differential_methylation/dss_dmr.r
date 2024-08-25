@@ -8,7 +8,7 @@ source("dss_common.r")
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 8) {
-  stop("Usage: Rscript dmr_analysis.R <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge>")
+  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <smoothing> <suffix>")
 }
 delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
@@ -193,139 +193,6 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   return(dmr_dt)
 }
 
-
-perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
-                                    testCovariate = "condition",
-                                    p_threshold = 0.05,
-                                    beta_threshold = -0.4, # For hypomethylation
-                                    minNumRegion = 5,
-                                    minCpGs = 3,
-                                    maxGap = 1000,
-                                    maxPerms = 10) {
-  print("starting dmrseq analysis")
-  sampleNames(combined_bsseq) <- gsub("tumour_", "tumour_", sampleNames(combined_bsseq))
-
-  # Create condition vector
-  condition <- factor(ifelse(grepl("tumour_", sampleNames(combined_bsseq)), "tumour", "control"))
-
-  # Run DMRseq
-  dmrs <- dmrseq(
-    bs = combined_bsseq,
-    cutoff = p_threshold,
-    testCovariate = testCovariate,
-    minNumRegion = minNumRegion,
-    minCpGs = minCpGs,
-    maxGap = maxGap,
-    maxPerms = maxPerms
-  )
-
-  print("finished initial dmrseq analysis")
-
-  # Convert to data.table and filter for significant hypomethylated DMRs
-  dmr_dt <- as.data.table(dmrs)
-  dmr_dt <- dmr_dt[pval <= p_threshold & beta < beta_threshold, .(
-    chr = seqnames,
-    start = start,
-    end = end,
-    diff.Methy = beta,
-    areaStat = stat * width, # Using stat * width as a proxy for area
-    pval = pval,
-    fdr = qval,
-    length = width,
-    numCG = numCpGs
-  )]
-
-  # Add hypomethylation flag (all should be TRUE at this point)
-  dmr_dt[, hypo_in_tumour := TRUE]
-
-  print(sprintf("dmrseq Identified %d high-confidence hypomethylated DMRs", nrow(dmr_dt)))
-
-  # Save as BED file
-  bed_file <- file.path(output_dir, "dmrseq_high_confidence_hypomethylated_dmrs.bed")
-  fwrite(dmr_dt[, .(chr, start, end, diff.Methy, areaStat, pval, fdr)],
-    file = bed_file, sep = "\t", col.names = FALSE
-  )
-  saveRDS(dmr_dt, file.path(output_dir, "dmrseq_hypomethylated_dmrs.rds"))
-
-  print(sprintf("DMRSeq analysis identified %d significant hypomethylated DMRs", nrow(dmr_dt)))
-  print("dmrseq visualisation")
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dmrseq", n = 10)
-  print("finished dmrseq")
-}
-
-perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.threshold, lambda, C = 2) {
-  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
-
-  print("Performing DMR analysis using DMRcate")
-  group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
-  group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-
-  # Design matrix for DMRcate analysis
-  design <- model.matrix(~ factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
-  colnames(design) <- c("Intercept", "TumourVsControl")
-
-  # Annotate CpGs with the design matrix
-  print("Annotating CpGs for DMRcate")
-  myAnnotation <- cpg.annotate(
-    object = combined_bsseq,
-    datatype = "BS",
-    what = "perRegion", # "perBase" or "perRegion" depending on your analysis
-    analysis.type = "differential",
-    design = design,
-    contrasts = TRUE,
-    cont.matrix = "TumourVsControl",
-    coef = 2
-  )
-
-  # Perform DMR analysis using DMRcate
-  print("Calling DMRs with DMRcate")
-  dmrcoutput <- dmrcate(
-    object = myAnnotation,
-    lambda = lambda,
-    C = C,
-    p.adjust.method = "BH",
-    p.threshold = p.threshold
-  )
-
-  # Extract and filter the DMRs
-  print("Extracting and filtering DMRs")
-  dmrs <- extractRanges(dmrcoutput, delta = delta, minlen = 3) # Adjust `minlen` as necessary
-
-  # Filter for hypomethylated regions
-  print("Filtering for hypomethylated DMRs")
-  dmrs_hypo <- dmrs[dmrs$stat < 0] # Retain only hypomethylated regions
-
-  # Save the hypomethylated DMRs to an RDS file
-  saveRDS(dmrs_hypo, file.path(output_dir, "dmrcate_hypomethylated_dmrs.rds"))
-
-  # Create BED format dataframe for hypomethylated DMRs
-  dmrs_hypo_bed <- data.frame(
-    chr = as.character(seqnames(dmrs_hypo)),
-    start = start(dmrs_hypo),
-    end = end(dmrs_hypo),
-    name = paste("HypoDMR", seq_along(dmrs_hypo), sep = "_"),
-    score = round(dmrs_hypo$stat, 2), # Score indicates level of hypomethylation
-    strand = rep(".", length(dmrs_hypo))
-  )
-
-  # Save BED file
-  bed_file <- file.path(output_dir, "dmrcate_hypomethylated_dmrs.bed")
-  write.table(dmrs_hypo_bed, file = bed_file, quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
-
-  print(sprintf("Saved %d hypomethylated DMRs to %s", nrow(dmrs_hypo_bed), bed_file))
-
-  # Visualization of hypomethylated DMRs
-  print("Creating visualizations for hypomethylated DMRs")
-  pdf(file.path(output_dir, "dmrcate_top10_hypomethylated_dmrs.pdf"))
-  DMR.plot(ranges = dmrs_hypo, dmr_output = dmrcoutput, bsseq = combined_bsseq, numRegions = 10, genome = "hg38")
-  dev.off()
-
-  print("DMRcate Analysis complete")
-  return(dmrs_hypo)
-}
-
-
-
 # perform analysis with provided parameters
 print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
@@ -336,25 +203,6 @@ output_dir <- file.path(base_dir, sprintf(
   "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
 ))
-
-print("running bump hunter analysis")
-perform_dmrcate_analysis(
-  combined_bsseq, # Your BSseq object
-  output_dir = output_dir,
-  delta = delta,
-  p.threshold = p.threshold, # P-value threshold
-  lambda = 500, # Smoothing parameter
-  C = 2 # Clustering parameter
-)
-
-print("running dmrseq analysis")
-dmrseq_results <- perform_dmrseq_analysis(
-  combined_bsseq,
-  output_dir,
-  p_threshold = p.threshold,
-  beta_threshold = -delta,
-  minCpGs = min.CpG,
-)
 
 print("running dss analysis")
 result <- perform_dmr_analysis(combined_bsseq, base_dir, output_dir,
