@@ -433,18 +433,14 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
 
     nSample1 <- length(prefix1_samples)
     nSample2 <- length(prefix2_samples)
-    nSample <- nSample1 + nSample2
+    nSample <- max(nSample1, nSample2)
 
-    # Calculate optimal layout
-    ncol <- 2
-    nrow <- ceiling(nSample / ncol)
-
-    # Set layout dynamically based on the total number of samples
-    layout(matrix(1:(nrow * ncol), nrow = nrow, ncol = ncol, byrow = TRUE))
+    # Set layout to 2 columns, with rows equal to the max number of samples in either group
+    layout(matrix(c(1:nSample, (nSample + 1):(2 * nSample)), nrow = nSample, ncol = 2))
 
     # Adjust margins based on the number of samples
-    mar_vertical <- max(0.5, 2.5 / sqrt(nrow))
-    mar_horizontal <- max(0.5, 2.5 / sqrt(ncol))
+    mar_vertical <- max(0.5, 2.5 / sqrt(nSample))
+    mar_horizontal <- max(0.5, 2.5 / sqrt(2)) # Always 2 columns
     par(
         mar = c(mar_vertical, mar_horizontal, mar_vertical, mar_horizontal),
         mgp = c(1.5, 0.5, 0),
@@ -476,17 +472,18 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
         rect(OneDMR$start, ylim[1], OneDMR$end, ylim[2], col = "#FF00001A", border = NA)
     }
 
-    # Plot all samples
-    for (sample in prefix1_samples) {
-        plotSample(sample)
+    # Plot all samples in their respective columns
+    for (i in 1:nSample) {
+        if (i <= nSample1) {
+            plotSample(prefix1_samples[i])
+        } else {
+            plot.new()
+        }
     }
-    for (sample in prefix2_samples) {
-        plotSample(sample)
-    }
-
-    # Fill remaining empty plots if any
-    if (nSample < nrow * ncol) {
-        for (i in (nSample + 1):(nrow * ncol)) {
+    for (i in 1:nSample) {
+        if (i <= nSample2) {
+            plotSample(prefix2_samples[i])
+        } else {
             plot.new()
         }
     }
@@ -500,16 +497,17 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
     )
 }
 
+# The plot_single_dmr and plot_top_DMRs functions remain the same
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
     print(sprintf("Processing DMR %d: %s:%d-%d with ext = %d", i, dmr$chr, dmr$start, dmr$end, ext))
 
     sNames <- sampleNames(combined_bsseq)
     nSample1 <- length(grep("^tumour", sNames))
     nSample2 <- length(grep("^control", sNames))
-    nSample <- nSample1 + nSample2
+    nSample <- max(nSample1, nSample2)
 
     # Dynamically set plot dimensions
-    plot_width <- max(10, 5 * sqrt(nSample))
+    plot_width <- max(10, 5 * sqrt(2 * nSample)) # Adjusted for 2 columns
     plot_height <- max(8, 4 * sqrt(nSample))
 
     tryCatch(
