@@ -253,7 +253,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
   print("finished dmrseq")
 }
 
-perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.threshold, fdr.threshold, lambda, C = 2) {
+perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.threshold, lambda, C = 2) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   print("Performing DMR analysis using DMRcate")
@@ -338,14 +338,13 @@ output_dir <- file.path(base_dir, sprintf(
 ))
 
 print("running bump hunter analysis")
-dmrcate_results <- perform_dmrcate_analysis(
-  combined_bsseq,
-  output_dir,
+perform_dmrcate_analysis(
+  combined_bsseq, # Your BSseq object
+  output_dir = output_dir,
   delta = delta,
-  fdr.threshold = fdr.threshold,
-  p.threshold = p.threshold,
-  C = 2,
-  lambda = 500,
+  p.threshold = p.threshold, # P-value threshold
+  lambda = 500, # Smoothing parameter
+  C = 2 # Clustering parameter
 )
 
 print("running dmrseq analysis")
