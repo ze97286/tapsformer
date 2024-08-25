@@ -193,81 +193,6 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   return(dmr_dt)
 }
 
-perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
-                                        cutoff = 0.2,
-                                        B = 1000,
-                                        maxGap = 500,
-                                        minCpGs = 3,
-                                        minRegionLength = 50,
-                                        maxRegionLength = 5000,
-                                        p_threshold = 0.05,
-                                        fdr_threshold = 0.05) {
-  print("starting bumphunter analysis")
-
-  # Ensure combined_bsseq is smoothed
-  combined_bsseq <- BSmooth(combined_bsseq)
-
-  # Retrieve smoothed methylation matrix
-  meth_mat <- getMeth(combined_bsseq, type = "smooth")
-
-  # Create design matrix
-  sample_groups <- ifelse(grepl("tumour_", colnames(meth_mat)), 1, 0)
-  design <- model.matrix(~sample_groups)
-
-  # Run bumphunter
-  bumps <- bumphunter(
-    bsseq = combined_bsseq,
-    design = design,
-    cutoff = cutoff,
-    B = B,
-    maxGap = maxGap,
-    smooth = TRUE,
-    verbose = TRUE
-  )
-
-  print("finished bump hunter - analysis starting filtering")
-
-  # Convert to data.table and filter for significant hypomethylated DMRs
-  dmr_dt <- as.data.table(bumps$table)
-  dmr_dt <- dmr_dt[
-    p.value <= p_threshold &
-      fwer <= fdr_threshold &
-      value < 0 &
-      L >= minCpGs &
-      (end - start + 1) >= minRegionLength &
-      (end - start + 1) <= maxRegionLength,
-    .(
-      chr = chr,
-      start = start,
-      end = end,
-      diff.Methy = value,
-      areaStat = area,
-      pval = p.value,
-      fdr = fwer,
-      length = end - start + 1,
-      numCG = L
-    )
-  ]
-
-  # Add hypomethylation flag (all should be TRUE at this point)
-  dmr_dt[, hypo_in_tumour := TRUE]
-
-  # Save as BED file
-  bed_file <- file.path(output_dir, "bumphunter_high_confidence_hypomethylated_dmrs.bed")
-  fwrite(dmr_dt[, .(chr, start, end, diff.Methy, areaStat, pval, fdr)],
-    file = bed_file, sep = "\t", col.names = FALSE
-  )
-
-  print(sprintf("Bumphunter Identified %d high-confidence hypomethylated DMRs", nrow(dmr_dt)))
-  print("bumphunter data saved - creating visualisations")
-
-  # Save full results as RDS
-  saveRDS(dmr_dt, file.path(output_dir, "bumphunter_hypomethylated_dmrs.rds"))
-  create_visualisations(dmr_dt, combined_bsseq, output_dir, "bumphunter_", n = 10)
-  print("finished bumphunter")
-
-  return(dmr_dt)
-}
 
 perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
                                     testCovariate = "condition",
@@ -411,16 +336,6 @@ output_dir <- file.path(base_dir, sprintf(
   "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
 ))
-
-print("running bump hunter analysis")
-bumphunter_results <- perform_bumphunter_analysis(
-  combined_bsseq,
-  output_dir,
-  fdr_threshold = fdr.threshold,
-  p_threshold = p.threshold,
-  minCpGs = min.CpG,
-  minRegionLength = min.len,
-)
 
 print("running bump hunter analysis")
 dmrcate_results <- perform_dmrcate_analysis(
