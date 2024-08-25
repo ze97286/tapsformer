@@ -97,7 +97,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       # Calculate optimal number of columns based on the number of loci
       num_loci <- nrow(top_hypo_dmls)
       num_samples <- length(sample_names)
-      ncol <- min(6, num_loci) 
+      ncol <- min(5, num_loci) 
 
       # Calculate the number of rows required
       nrow <- ceiling(num_loci / ncol)
