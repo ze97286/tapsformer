@@ -23,7 +23,7 @@ bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db", "bumphunter", "dmrseq",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel","Gviz", "DMRcate"
 )
-cran_packages <- c("minfi", "Biobase","data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
+cran_packages <- c("jpeg", "minfi", "Biobase","data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
