@@ -20,7 +20,7 @@ bioc_install_and_load <- function(pkg) {
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 bioc_packages <- c(
-    "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db",
+    "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db", "bumphunter", "dmrseq",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel"
 )
 cran_packages <- c("data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
@@ -135,11 +135,11 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir) 
 }
 
 # Volcano plot
-create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir) {
+create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, prefix = "dss_") {
     if (pval_col %in% names(dmx_dt)) {
         print("Creating volcano plot")
         safe_plot(
-            file.path(output_dir, "volcano_plot.svg"),
+            file.path(output_dir, prefix, "volcano_plot.svg"),
             function() {
                 plot <- ggplot(dmx_dt, aes_string(x = diff_col, y = paste0("-log10(", pval_col, ")"))) +
                     geom_point(aes(color = hypo_in_tumour)) +
@@ -165,10 +165,10 @@ create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir) {
 }
 
 # Methylation difference distribution plot
-create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir) {
+create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, prefix = "dss_") {
     print("Creating methylation difference distribution plot")
     safe_plot(
-        file.path(output_dir, "methylation_difference_distribution.svg"),
+        file.path(output_dir, prefix, "methylation_difference_distribution.svg"),
         function() {
             plot <- ggplot(dmx_dt, aes_string(x = diff_col)) +
                 geom_histogram(binwidth = 0.05, fill = "lightblue", color = "black") +
@@ -184,7 +184,7 @@ create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir) {
     return(TRUE)
 }
 
-create_dmr_length_plot <- function(dmx_dt, output_dir) {
+create_dmr_length_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
     print("Creating DMR length distribution plot")
     safe_plot(
         file.path(output_dir, "dmr_length_distribution.svg"),
@@ -204,7 +204,7 @@ create_dmr_length_plot <- function(dmx_dt, output_dir) {
 }
 
 # dmx by chromosome plot
-create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
+create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir, prefix) {
     print("Creating chromosome coverage plot")
 
     # Create a data frame with chromosome sizes
@@ -252,7 +252,7 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
         theme_minimal() +
         theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
-    safe_plot(file.path(output_dir, "chromosome_coverage_plot.svg"), function() {
+    safe_plot(file.path(output_dir, prefix, "chromosome_coverage_plot.svg"), function() {
         print(p)
     })
 
@@ -260,7 +260,7 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir) {
 }
 
 # Manhattan plot
-create_manhattan_plot <- function(dmx_dt, output_dir) {
+create_manhattan_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
     print("Creating Manhattan plot")
     # Create a data frame with chromosome sizes
     chr_sizes <- data.frame(
@@ -285,7 +285,7 @@ create_manhattan_plot <- function(dmx_dt, output_dir) {
     dmx_dt$cumpos <- dmx_dt$start + chr_sizes$cumpos[match(dmx_dt$chr, chr_sizes$chr)] - chr_sizes$size[match(dmx_dt$chr, chr_sizes$chr)]
 
     safe_plot(
-        file.path(output_dir, "manhattan_plot.svg"),
+        file.path(output_dir, prefix, "manhattan_plot.svg"),
         function() {
             plot <- ggplot(dmx_dt, aes(x = cumpos, y = -log10(pval), color = factor(chr))) +
                 geom_point(alpha = 0.8, size = 1) +
@@ -307,10 +307,10 @@ create_manhattan_plot <- function(dmx_dt, output_dir) {
 }
 
 # Q-Q Plot
-create_qq_plot <- function(dmx_dt, output_dir) {
+create_qq_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
     print("Creating Q-Q plot")
     safe_plot(
-        file.path(output_dir, "qq_plot.svg"),
+        file.path(output_dir, prefix, "qq_plot.svg"),
         function() {
             observed <- sort(-log10(dmx_dt$pval))
             expected <- -log10(ppoints(length(observed)))
@@ -331,7 +331,7 @@ create_qq_plot <- function(dmx_dt, output_dir) {
 }
 
 # Pie chart of genomic context of differentially methylated regions/loci
-create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
+create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, prefix="dss_") {
     print("Annotating regions with genomic context")
     if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
         dmx_dt[, start := pos]
@@ -402,7 +402,7 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir) {
         theme_void() +
         labs(title = "Distribution of Regions across Genomic Features")
 
-    safe_plot(file.path(output_dir, "genomic_context_distribution.svg"), function() {
+    safe_plot(file.path(output_dir, prefix, "genomic_context_distribution.svg"), function() {
         print(p)
     })
 
