@@ -49,33 +49,35 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
   # Design matrix for DMRcate analysis
-  design <- model.matrix(~ factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
-  colnames(design) <- c("Intercept", "TumourVsControl")
+  design <- model.matrix(~ 0 + factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
+  colnames(design) <- c("tumour", "control")
 
-  # Annotate CpGs with the design matrix
-  print("Annotating CpGs for DMRcate")
+  # Create the contrast matrix
+  cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
+
+  # Run cpg.annotate for DMRcate analysis
   myAnnotation <- cpg.annotate(
-      object = combined_bsseq,
-      what = "Beta",            # or "M" depending on your data
-      analysis.type = "differential",
-      design = design,
-      contrasts = TRUE,
-      cont.matrix = "TumourVsControl",
-      coef = 2
+    object = combined_bsseq,
+    what = "Beta", # or "M" depending on your data
+    analysis.type = "differential",
+    design = design,
+    contrasts = TRUE,
+    cont.matrix = cont.matrix,
+    coef = "TumourVsControl" # This matches the contrast name in cont.matrix
   )
 
   # Perform DMR analysis using DMRcate
   print("Calling DMRs with DMRcate")
   dmrcoutput <- dmrcate(
-      object = myAnnotation,
-      lambda = lambda,
-      C = C,
-      min.cpgs = 3,
+    object = myAnnotation,
+    lambda = lambda,
+    C = C,
+    min.cpgs = 3,
   )
 
   # Extract and filter the DMRs
   print("Extracting and filtering DMRs")
-  dmrs <- extractRanges(dmrcoutput, delta = delta,genome="hg38") # Adjust `minlen` as necessary
+  dmrs <- extractRanges(dmrcoutput, delta = delta, genome = "hg38") # Adjust `minlen` as necessary
 
   # Filter for hypomethylated regions
   print("Filtering for hypomethylated DMRs")
