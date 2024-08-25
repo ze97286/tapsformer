@@ -207,28 +207,25 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
   # Ensure combined_bsseq is smoothed
   combined_bsseq <- BSmooth(combined_bsseq)
 
-  # Create design matrix
-  sample_groups <- ifelse(grepl("tumour_", colnames(getMeth(combined_bsseq))), 1, 0)
-  design <- model.matrix(~sample_groups)
+  # Retrieve smoothed methylation matrix
+  meth_mat <- getMeth(combined_bsseq, type = "smooth")
 
-  # Get methylation data and genomic locations
-  meth_mat <- getMeth(combined_bsseq, type = "Beta")
-  gr <- granges(combined_bsseq)
+  # Create design matrix
+  sample_groups <- ifelse(grepl("tumour_", colnames(meth_mat)), 1, 0)
+  design <- model.matrix(~sample_groups)
 
   # Run bumphunter
   bumps <- bumphunter(
-    object = gr,
+    bsseq = combined_bsseq,
     design = design,
-    coef = 2,
     cutoff = cutoff,
     B = B,
     maxGap = maxGap,
     smooth = TRUE,
-    smoothFunction = loessByCluster,
     verbose = TRUE
   )
 
-  print("finished bumphunter - analysis starting filtering")
+  print("finished bump hunter - analysis starting filtering")
 
   # Convert to data.table and filter for significant hypomethylated DMRs
   dmr_dt <- as.data.table(bumps$table)
@@ -240,7 +237,7 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
       (end - start + 1) >= minRegionLength &
       (end - start + 1) <= maxRegionLength,
     .(
-      chr = seqnames,
+      chr = chr,
       start = start,
       end = end,
       diff.Methy = value,
@@ -331,6 +328,79 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
   print("finished dmrseq")
 }
 
+perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.threshold, fdr.threshold, lambda, C = 2) {
+  dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
+
+  print("Performing DMR analysis using DMRcate")
+  group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
+  group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+
+  # Design matrix for DMRcate analysis
+  design <- model.matrix(~ factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
+  colnames(design) <- c("Intercept", "TumourVsControl")
+
+  # Annotate CpGs with the design matrix
+  print("Annotating CpGs for DMRcate")
+  myAnnotation <- cpg.annotate(
+    object = combined_bsseq,
+    datatype = "BS",
+    what = "perRegion", # "perBase" or "perRegion" depending on your analysis
+    analysis.type = "differential",
+    design = design,
+    contrasts = TRUE,
+    cont.matrix = "TumourVsControl",
+    coef = 2
+  )
+
+  # Perform DMR analysis using DMRcate
+  print("Calling DMRs with DMRcate")
+  dmrcoutput <- dmrcate(
+    object = myAnnotation,
+    lambda = lambda,
+    C = C,
+    p.adjust.method = "BH",
+    p.threshold = p.threshold
+  )
+
+  # Extract and filter the DMRs
+  print("Extracting and filtering DMRs")
+  dmrs <- extractRanges(dmrcoutput, delta = delta, minlen = 3) # Adjust `minlen` as necessary
+
+  # Filter for hypomethylated regions
+  print("Filtering for hypomethylated DMRs")
+  dmrs_hypo <- dmrs[dmrs$stat < 0] # Retain only hypomethylated regions
+
+  # Save the hypomethylated DMRs to an RDS file
+  saveRDS(dmrs_hypo, file.path(output_dir, "dmrcate_hypomethylated_dmrs.rds"))
+
+  # Create BED format dataframe for hypomethylated DMRs
+  dmrs_hypo_bed <- data.frame(
+    chr = as.character(seqnames(dmrs_hypo)),
+    start = start(dmrs_hypo),
+    end = end(dmrs_hypo),
+    name = paste("HypoDMR", seq_along(dmrs_hypo), sep = "_"),
+    score = round(dmrs_hypo$stat, 2), # Score indicates level of hypomethylation
+    strand = rep(".", length(dmrs_hypo))
+  )
+
+  # Save BED file
+  bed_file <- file.path(output_dir, "dmrcate_hypomethylated_dmrs.bed")
+  write.table(dmrs_hypo_bed, file = bed_file, quote = FALSE, sep = "\t", row.names = FALSE, col.names = TRUE)
+
+  print(sprintf("Saved %d hypomethylated DMRs to %s", nrow(dmrs_hypo_bed), bed_file))
+
+  # Visualization of hypomethylated DMRs
+  print("Creating visualizations for hypomethylated DMRs")
+  pdf(file.path(output_dir, "dmrcate_top10_hypomethylated_dmrs.pdf"))
+  DMR.plot(ranges = dmrs_hypo, dmr_output = dmrcoutput, bsseq = combined_bsseq, numRegions = 10, genome = "hg38")
+  dev.off()
+
+  print("DMRcate Analysis complete")
+  return(dmrs_hypo)
+}
+
+
+
 # perform analysis with provided parameters
 print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
@@ -342,6 +412,19 @@ output_dir <- file.path(base_dir, sprintf(
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
 ))
 
+
+print("running bump hunter analysis")
+dmrcate_results <- perform_dmrcate_analysis(
+  combined_bsseq,
+  output_dir,
+  delta = delta,
+  fdr.threshold = fdr.threshold,
+  p.threshold = p.threshold,
+  C = 2,
+  lambda = 500,
+)
+
+
 print("running bump hunter analysis")
 bumphunter_results <- perform_bumphunter_analysis(
   combined_bsseq,
@@ -351,6 +434,8 @@ bumphunter_results <- perform_bumphunter_analysis(
   minCpGs = min.CpG,
   minRegionLength = min.len,
 )
+
+
 
 print("running dmrseq analysis")
 dmrseq_results <- perform_dmrseq_analysis(
