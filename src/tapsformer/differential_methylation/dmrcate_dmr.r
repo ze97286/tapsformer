@@ -48,6 +48,45 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   print(str(combined_bsseq))
 
+  methylation_data <- getMeth(combined_bsseq, type = "raw")
+  print("dim(methylation_data)", dim(methylation_data))
+
+  # Get methylation and coverage data
+  meth_data <- getMeth(combined_bsseq, type = "raw")
+  cov_data <- getCoverage(combined_bsseq)
+
+  # Filter out low coverage sites
+  keep <- rowSums(cov_data >= 10) == ncol(cov_data)
+  meth_data_filtered <- meth_data[keep, ]
+  cov_data_filtered <- cov_data[keep, ]
+
+  # Create DGEList object
+  y <- DGEList(counts = meth_data_filtered, lib.size = colSums(cov_data_filtered))
+
+  # Normalize
+  y <- calcNormFactors(y)
+
+  # Create design matrix
+  group1 <- grep("tumour_", colnames(meth_data_filtered), value = TRUE)
+  group2 <- grep("control_", colnames(meth_data_filtered), value = TRUE)
+  design <- model.matrix(~ 0 + factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
+  colnames(design) <- c("tumour", "control")
+
+  # Create contrast matrix
+  cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
+
+  # Attempt to fit the model
+  v <- voom(y, design)
+  fit <- lmFit(v, design)
+
+  print("Dimensions after processing:")
+  print(dim(v$E))
+  print(dim(design))
+
+  # If successful, continue with contrast fit
+  fit2 <- contrasts.fit(fit, cont.matrix)
+  fit2 <- eBayes(fit2)
+
   # Try to access the assays directly
   print("Available assays:")
   print(assayNames(combined_bsseq))
@@ -68,6 +107,25 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   if (length(assayNames(combined_bsseq)) == 0) {
     print("Warning: No assays found in the BSseq object")
   }
+
+  # Create GRanges object
+  gr <- granges(combined_bsseq)
+
+  # Create GenomicRatioSet
+  grs <- GenomicRatioSet(
+    gr = gr, beta = meth_data, M = cov_data,
+    colData = colData(combined_bsseq)
+  )
+
+  # Now try sequencing.annotate with this object
+  myAnnotation <- sequencing.annotate(
+    grs,
+    methdesign = design,
+    contrasts = TRUE,
+    cont.matrix = cont.matrix,
+    coef = "TumourVsControl",
+    fdr = fdr_threshold
+  )
 
 
   # Debug: Print sample names and dimensions of combined_bsseq
