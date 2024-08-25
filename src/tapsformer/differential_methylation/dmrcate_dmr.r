@@ -46,6 +46,30 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   print("Performing DMR analysis using DMRcate")
 
+  print(str(combined_bsseq))
+
+  # Try to access the assays directly
+  print("Available assays:")
+  print(assayNames(combined_bsseq))
+
+  # If 'M' assay exists, print its dimensions
+  if ("M" %in% assayNames(combined_bsseq)) {
+    print("Dimensions of M assay:")
+    print(dim(assay(combined_bsseq, "M")))
+  }
+
+  # If 'Cov' assay exists, print its dimensions
+  if ("Cov" %in% assayNames(combined_bsseq)) {
+    print("Dimensions of Cov assay:")
+    print(dim(assay(combined_bsseq, "Cov")))
+  }
+
+  # Check if any assays exist
+  if (length(assayNames(combined_bsseq)) == 0) {
+    print("Warning: No assays found in the BSseq object")
+  }
+
+
   # Debug: Print sample names and dimensions of combined_bsseq
   print("Sample names in combined_bsseq:")
   print(sampleNames(combined_bsseq))
