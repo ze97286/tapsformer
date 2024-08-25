@@ -21,9 +21,9 @@ bioc_install_and_load <- function(pkg) {
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db", "bumphunter", "dmrseq",
-    "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel","Gviz", "DMRcate"
+    "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel", "Gviz", "DMRcate"
 )
-cran_packages <- c("jpeg", "minfi", "Biobase","data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
+cran_packages <- c("jpeg", "minfi", "Biobase", "data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -331,7 +331,7 @@ create_qq_plot <- function(dmx_dt, output_dir, prefix = "dss") {
 }
 
 # Pie chart of genomic context of differentially methylated regions/loci
-create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, prefix="dss") {
+create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, prefix = "dss") {
     print("Annotating regions with genomic context")
     if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
         dmx_dt[, start := pos]
@@ -411,7 +411,7 @@ create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, p
 
 
 showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, ylim = c(0, 1)) {
-    ## get chr, position and counts
+    ## get chr, position, and counts
     allchr <- as.character(seqnames(BSobj))
     allpos <- start(BSobj)
     X <- getBSseq(BSobj, "M")
@@ -435,13 +435,9 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
     nSample2 <- length(prefix2_samples)
     nSample <- max(nSample1, nSample2)
 
-    if (nSample > 2) {
-        y.cex <- 0.66
-    } else {
-        y.cex <- 1
-    }
-
+    # Set layout dynamically based on the number of samples
     par(mfrow = c(nSample, 2), mar = c(2.5, 2.5, 1.6, 2.5), mgp = c(1.5, 0.5, 0))
+
     thisP <- thisX / thisN
 
     plotSample <- function(sample_name, column) {
@@ -452,10 +448,10 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
             main = sample_name
         )
         box(col = "black")
-        axis(1, )
+        axis(1)
         axis(2, col = "blue", col.axis = "blue")
-        mtext(chr, side = 1, line = 1.33, cex = y.cex)
-        mtext("methyl%", side = 2, line = 1.33, col = "blue", cex = y.cex)
+        mtext(chr, side = 1, line = 1.33, cex = 0.66)
+        mtext("methyl%", side = 2, line = 1.33, col = "blue", cex = 0.66)
 
         thisN.norm <- thisN[ix1, i] / max(thisN[ix1, ]) * ylim[2]
         lines(thispos[ix1], thisN.norm, type = "l", col = "gray", lwd = 1.5)
@@ -463,7 +459,7 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
             side = 4, at = seq(0, ylim[2], length.out = 5),
             labels = round(seq(0, max(thisN[ix1, ]), length.out = 5))
         )
-        mtext("read depth", side = 4, line = 1.33, cex = y.cex)
+        mtext("read depth", side = 4, line = 1.33, cex = 0.66)
 
         rect(OneDMR$start, ylim[1], OneDMR$end, ylim[2], col = "#FF00001A", border = NA)
     }
@@ -484,13 +480,20 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
 }
 
 
+
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
     # Debugging prints to track progress
     print(sprintf("Processing DMR %d: %s:%d-%d with ext = %d", i, dmr$chr, dmr$start, dmr$end, ext))
 
-    # Set plot dimensions
-    plot_width <- 10 # Fixed width
-    plot_height <- 5 # Fixed height (adjust if necessary)
+    # Calculate number of samples
+    sNames <- sampleNames(combined_bsseq)
+    nSample1 <- length(grep("^tumour", sNames))
+    nSample2 <- length(grep("^control", sNames))
+    nSample <- max(nSample1, nSample2)
+
+    # Dynamically set plot dimensions based on the number of samples
+    plot_width <- max(10, 2 * nSample) # Adjust width based on number of samples
+    plot_height <- max(5, 1.5 * nSample) # Adjust height based on number of samples
 
     tryCatch(
         {
@@ -498,7 +501,7 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
             svglite::svglite(filename, width = plot_width, height = plot_height)
 
             # Reset graphical parameters to ensure a fresh start
-            par(mar = c(5, 4, 4, 2) + 0.1)
+            par(mar = c(4, 4, 2, 2) + 0.1) # Slightly larger margins to accommodate labels
 
             # Call showOneDMR to plot the DMR across all samples
             showOneDMRTwoPrefixes(dmr, combined_bsseq, "tumour", "control", ext = ext)
