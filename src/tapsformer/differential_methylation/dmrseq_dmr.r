@@ -154,7 +154,7 @@ dmrseq_results <- perform_dmrseq_analysis(
   combined_bsseq,
   output_dir,
   beta_threshold = -delta,
-  minCpGs = min.CpG,
+  minNumRegion = min.CpG,
   maxGap = dis.merge,
 )
 
