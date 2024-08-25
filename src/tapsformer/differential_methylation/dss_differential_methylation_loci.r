@@ -97,21 +97,21 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
       # Calculate optimal number of columns based on the number of loci
       num_loci <- nrow(top_hypo_dmls)
       num_samples <- length(sample_names)
-      ncol <- min(10, num_loci) # Use 10 as max columns, or fewer if less than 10 loci
+      ncol <- min(8, num_loci) # Change to 8 columns instead of 10
 
       # Calculate the number of rows required
       nrow <- ceiling(num_loci / ncol)
 
       # Adjust plot dimensions based on the number of rows and columns
-      plot_width <- max(15, ncol * 1.5) # Width scales with the number of columns
-      plot_height <- max(10, nrow * 1.2) # Height scales with the number of rows
+      plot_width <- max(18, ncol * 2) # Increase width to scale with more columns
+      plot_height <- max(10, nrow * 1.5) # Increase height to scale with more rows
 
       # Generate the plot
       svglite::svglite(output_filename, width = plot_width, height = plot_height)
 
       plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
         geom_point(size = 2) +
-        facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) + # Dynamic ncol based on num_loci
+        facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) + # Use the updated ncol
         theme_bw() +
         labs(
           title = "Methylation Levels Across Samples for Each DML",
@@ -120,10 +120,10 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
         scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
         scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
         theme(
-          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1), # Rotate labels 45 degrees
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), # Adjust size for better readability
           strip.text = element_text(size = 12), # Adjust if needed
           plot.margin = unit(c(1, 1, 1, 1), "cm"),
-          panel.spacing = unit(1, "lines") # Increase spacing between panels
+          panel.spacing = unit(1.5, "lines") # Increase spacing between panels
         )
 
       print(plot)
@@ -137,6 +137,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   )
   return(output_filename)
 }
+
 
 sliding_window_filter <- function(dmls, window_size, min_cpgs = 3, consistency_threshold = 0.8) {
   dmls[, window := cut(pos, breaks = seq(min(pos), max(pos) + window_size, by = window_size))]
