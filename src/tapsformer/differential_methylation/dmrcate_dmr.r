@@ -57,7 +57,7 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.thresh
   myAnnotation <- cpg.annotate(
     object = combined_bsseq,
     datatype = "BS",
-    what = "perRegion", # "perBase" or "perRegion" depending on your analysis
+    what = "Beta", 
     analysis.type = "differential",
     design = design,
     contrasts = TRUE,
