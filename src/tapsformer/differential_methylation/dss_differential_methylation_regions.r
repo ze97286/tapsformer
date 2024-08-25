@@ -205,8 +205,9 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
   print("starting bumphunter analysis")
 
   # Convert BSseq to GenomicRatioSet
-  gr_set <- makeGenomicRatioSetFromMatrix(getMeth(combined_bsseq, type = "Beta"),
+  gr_set <- GenomicRatioSet(
     gr = granges(combined_bsseq),
+    Beta = getMeth(combined_bsseq, type = "Beta"),
     pData = pData(combined_bsseq)
   )
 
