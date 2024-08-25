@@ -435,85 +435,90 @@ showOneDMRTwoPrefixes <- function(OneDMR, BSobj, prefix1, prefix2, ext = 500, yl
     nSample2 <- length(prefix2_samples)
     nSample <- max(nSample1, nSample2)
 
+    # Calculate optimal layout
+    ncol <- 2
+    nrow <- ceiling(nSample / ncol)
+
     # Set layout dynamically based on the number of samples
-    par(mfrow = c(nSample, 2), mar = c(2.5, 2.5, 1.6, 2.5), mgp = c(1.5, 0.5, 0))
+    layout(matrix(1:(nrow * ncol), nrow = nrow, ncol = ncol, byrow = TRUE))
+
+    # Adjust margins based on the number of samples
+    mar_vertical <- max(0.5, 2.5 / sqrt(nrow))
+    mar_horizontal <- max(0.5, 2.5 / sqrt(ncol))
+    par(
+        mar = c(mar_vertical, mar_horizontal, mar_vertical, mar_horizontal),
+        mgp = c(1.5, 0.5, 0),
+        oma = c(2, 2, 2, 2)
+    ) # Add outer margins for labels
 
     thisP <- thisX / thisN
 
-    plotSample <- function(sample_name, column) {
+    plotSample <- function(sample_name) {
         i <- which(sNames == sample_name)
         plot(thispos[ix1], thisP[ix1, i],
-            type = "h", col = "blue", axes = F, lwd = 1.5,
+            type = "h", col = "blue", axes = FALSE, lwd = 1.5,
             xlab = "", ylab = "", ylim = ylim, xlim = xlim,
-            main = sample_name
+            main = ""
         )
         box(col = "black")
-        axis(1)
-        axis(2, col = "blue", col.axis = "blue")
-        mtext(chr, side = 1, line = 1.33, cex = 0.66)
-        mtext("methyl%", side = 2, line = 1.33, col = "blue", cex = 0.66)
+        axis(1, cex.axis = 0.8)
+        axis(2, col = "blue", col.axis = "blue", cex.axis = 0.8)
+        title(main = sample_name, cex.main = 0.9)
 
         thisN.norm <- thisN[ix1, i] / max(thisN[ix1, ]) * ylim[2]
         lines(thispos[ix1], thisN.norm, type = "l", col = "gray", lwd = 1.5)
         axis(
             side = 4, at = seq(0, ylim[2], length.out = 5),
-            labels = round(seq(0, max(thisN[ix1, ]), length.out = 5))
+            labels = round(seq(0, max(thisN[ix1, ]), length.out = 5)),
+            cex.axis = 0.8
         )
-        mtext("read depth", side = 4, line = 1.33, cex = 0.66)
 
         rect(OneDMR$start, ylim[1], OneDMR$end, ylim[2], col = "#FF00001A", border = NA)
     }
 
     for (i in 1:nSample) {
         if (i <= nSample1) {
-            plotSample(prefix1_samples[i], 1)
+            plotSample(prefix1_samples[i])
         } else {
-            plot.new() # empty plot if no more samples for prefix1
+            plot.new()
         }
 
         if (i <= nSample2) {
-            plotSample(prefix2_samples[i], 2)
+            plotSample(prefix2_samples[i])
         } else {
-            plot.new() # empty plot if no more samples for prefix2
+            plot.new()
         }
     }
+
+    # Add overall title and axis labels
+    mtext(chr, side = 1, outer = TRUE, line = 0.5, cex = 0.8)
+    mtext("methyl%", side = 2, outer = TRUE, line = 0.5, col = "blue", cex = 0.8)
+    mtext("read depth", side = 4, outer = TRUE, line = 0.5, cex = 0.8)
+    mtext(sprintf("DMR: %s:%d-%d", OneDMR$chr, OneDMR$start, OneDMR$end),
+        side = 3, outer = TRUE, line = 0.5, cex = 1
+    )
 }
 
-
-
 plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
-    # Debugging prints to track progress
     print(sprintf("Processing DMR %d: %s:%d-%d with ext = %d", i, dmr$chr, dmr$start, dmr$end, ext))
 
-    # Calculate number of samples
     sNames <- sampleNames(combined_bsseq)
     nSample1 <- length(grep("^tumour", sNames))
     nSample2 <- length(grep("^control", sNames))
     nSample <- max(nSample1, nSample2)
 
-    # Dynamically set plot dimensions based on the number of samples
-    plot_width <- max(10, 2 * nSample) # Adjust width based on number of samples
-    plot_height <- max(5, 1.5 * nSample) # Adjust height based on number of samples
+    # Dynamically set plot dimensions
+    plot_width <- max(10, 5 * sqrt(nSample))
+    plot_height <- max(8, 4 * sqrt(nSample))
 
     tryCatch(
         {
-            # Open a new SVG device for plotting the DMR
             svglite::svglite(filename, width = plot_width, height = plot_height)
-
-            # Reset graphical parameters to ensure a fresh start
-            par(mar = c(4, 4, 2, 2) + 0.1) # Slightly larger margins to accommodate labels
-
-            # Call showOneDMR to plot the DMR across all samples
             showOneDMRTwoPrefixes(dmr, combined_bsseq, "tumour", "control", ext = ext)
-            title(main = sprintf("DMR %d: %s:%d-%d", i, dmr$chr, dmr$start, dmr$end), line = 1, cex.main = 1.2)
-
-            # Close the device after plotting
             dev.off()
-
             print(sprintf("Plot saved to %s", filename))
         },
         error = function(e) {
-            # Error handling
             print(sprintf("Error encountered while processing DMR %d: %s", i, conditionMessage(e)))
         }
     )

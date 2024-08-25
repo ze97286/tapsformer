@@ -101,7 +101,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
     testCovariate = "condition",
     minNumRegion = minNumRegion,
     maxGap = maxGap,
-    maxPerms = 1, # TEMP TEMP TEMP - change to 10 later.
+    maxPerms = 10,
   )
 
   print("finished initial dmrseq analysis")

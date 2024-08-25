@@ -41,29 +41,30 @@ print("Starting dmrcate analysis")
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
 gc()
 
-perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, C = 2) {
+perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, C = 2, fdr_threshold = 0.05) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   print("Performing DMR analysis using DMRcate")
+
+  # Ensure that the sample names in combined_bsseq are correctly labeled
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # Design matrix for DMRcate analysis
+  # Design matrix for sequencing.annotate
   design <- model.matrix(~ 0 + factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
   colnames(design) <- c("tumour", "control")
 
   # Create the contrast matrix
   cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
 
-  # Run cpg.annotate for DMRcate analysis
-  myAnnotation <- cpg.annotate(
-    object = combined_bsseq,
-    what = "Beta", # or "M" depending on your data
-    analysis.type = "differential",
-    design = design,
+  # Run sequencing.annotate for DMRcate analysis
+  myAnnotation <- sequencing.annotate(
+    obj = combined_bsseq,
+    methdesign = design,
     contrasts = TRUE,
     cont.matrix = cont.matrix,
-    coef = "TumourVsControl" # This matches the contrast name in cont.matrix
+    coef = "TumourVsControl", # Must match the contrast name in cont.matrix
+    fdr = fdr_threshold
   )
 
   # Perform DMR analysis using DMRcate
@@ -72,16 +73,16 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
     object = myAnnotation,
     lambda = lambda,
     C = C,
-    min.cpgs = 3,
+    min.cpgs = 3
   )
 
   # Extract and filter the DMRs
   print("Extracting and filtering DMRs")
-  dmrs <- extractRanges(dmrcoutput, delta = delta, genome = "hg38") # Adjust `minlen` as necessary
+  dmrs <- extractRanges(dmrcoutput, delta = delta, genome = "hg38")
 
   # Filter for hypomethylated regions
   print("Filtering for hypomethylated DMRs")
-  dmrs_hypo <- dmrs[dmrs$stat < 0] # Retain only hypomethylated regions
+  dmrs_hypo <- dmrs[dmrs$stat < 0]
 
   # Save the hypomethylated DMRs to an RDS file
   saveRDS(dmrs_hypo, file.path(output_dir, "dmrcate_hypomethylated_dmrs.rds"))
@@ -92,7 +93,7 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
     start = start(dmrs_hypo),
     end = end(dmrs_hypo),
     name = paste("HypoDMR", seq_along(dmrs_hypo), sep = "_"),
-    score = round(dmrs_hypo$stat, 2), # Score indicates level of hypomethylation
+    score = round(dmrs_hypo$stat, 2),
     strand = rep(".", length(dmrs_hypo))
   )
 
@@ -129,6 +130,7 @@ perform_dmrcate_analysis(
   output_dir = output_dir,
   delta = delta,
   lambda = 500, # Smoothing parameter
+  fdr_threshold = fdr.threshold,
   C = 2 # Clustering parameter
 )
 

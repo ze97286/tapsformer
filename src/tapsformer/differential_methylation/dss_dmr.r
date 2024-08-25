@@ -54,8 +54,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
   dmr_plot_dir <- file.path(output_dir, prefix, "strongest_hypomethylated_dmr_plots")
   dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
 
-  # Sort in descending order of areaStat and take top n
-  strongest_dmrs <- head(top_hypo_dmrs[order(-areaStat)], n)
+  strongest_dmrs <- head(top_hypo_dmrs[order(-top_hypo_dmrs$areaStat), ], n)
 
   for (i in 1:nrow(strongest_dmrs)) {
     dmr <- strongest_dmrs[i, ]
@@ -64,14 +63,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
       "DMR_%d_chr%s_%d-%d.svg",
       i, dmr$chr, dmr$start, dmr$end
     ))
-    tryCatch(
-      {
-        plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
-      },
-      error = function(e) {
-        print(sprintf("Error plotting DMR %d: %s", i, conditionMessage(e)))
-      }
-    )
+    plot_single_dmr(filename, dmr, combined_bsseq, i, ext)
   }
   print(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
 }
