@@ -46,18 +46,39 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   print("Performing DMR analysis using DMRcate")
 
+  # Debug: Print sample names
+  print("Sample names in combined_bsseq:")
+  print(sampleNames(combined_bsseq))
+
   # Ensure that the sample names in combined_bsseq are correctly labeled
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
+
+  # Debug: Print group sizes
+  print(paste("Number of tumour samples:", length(group1)))
+  print(paste("Number of control samples:", length(group2)))
 
   # Design matrix for sequencing.annotate
   design <- model.matrix(~ 0 + factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
   colnames(design) <- c("tumour", "control")
 
+  # Debug: Print design matrix
+  print("Design matrix:")
+  print(design)
+
+  # Debug: Check dimensions
+  print(paste("Number of samples in combined_bsseq:", ncol(combined_bsseq)))
+  print(paste("Number of rows in design matrix:", nrow(design)))
+
   # Create the contrast matrix
   cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
 
+  # Debug: Print contrast matrix
+  print("Contrast matrix:")
+  print(cont.matrix)
+
   # Run sequencing.annotate for DMRcate analysis
+  print("Running sequencing.annotate...")
   myAnnotation <- sequencing.annotate(
     obj = combined_bsseq,
     methdesign = design,
@@ -112,7 +133,6 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   print("DMRcate Analysis complete")
   return(dmrs_hypo)
 }
-
 # perform analysis with provided parameters
 print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
