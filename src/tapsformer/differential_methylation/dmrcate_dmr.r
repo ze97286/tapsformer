@@ -133,6 +133,7 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   print("DMRcate Analysis complete")
   return(dmrs_hypo)
 }
+
 # perform analysis with provided parameters
 print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
