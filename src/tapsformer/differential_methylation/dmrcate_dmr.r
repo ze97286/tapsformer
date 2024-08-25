@@ -51,6 +51,17 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   print(sampleNames(combined_bsseq))
   print(paste("Dimensions of combined_bsseq:", paste(dim(combined_bsseq), collapse = " x ")))
 
+  # Debug: Print more details about the BSseq object
+  print("Class of combined_bsseq:")
+  print(class(combined_bsseq))
+  print("Slots in combined_bsseq:")
+  print(slotNames(combined_bsseq))
+
+  # Check for empty CpG sites
+  print("Number of CpG sites with zero coverage across all samples:")
+  zero_coverage <- rowSums(getCoverage(combined_bsseq) == 0) == ncol(combined_bsseq)
+  print(sum(zero_coverage))
+
   # Ensure that the sample names in combined_bsseq are correctly labeled
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
@@ -67,16 +78,8 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   print("Design matrix:")
   print(design)
 
-  # Debug: Check dimensions
-  print(paste("Number of samples in combined_bsseq:", ncol(combined_bsseq)))
-  print(paste("Number of rows in design matrix:", nrow(design)))
-
   # Create the contrast matrix
   cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
-
-  # Debug: Print contrast matrix
-  print("Contrast matrix:")
-  print(cont.matrix)
 
   # Run sequencing.annotate for DMRcate analysis
   print("Running sequencing.annotate...")
@@ -101,13 +104,11 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
       print("Summary of combined_bsseq:")
       print(summary(combined_bsseq))
 
-      # If possible, try to access the 'M' and 'Cov' matrices
-      if (is(combined_bsseq, "BSseq")) {
-        print("Dimensions of M matrix:")
-        print(dim(getMeth(combined_bsseq, type = "raw")))
-        print("Dimensions of Cov matrix:")
-        print(dim(getCoverage(combined_bsseq)))
-      }
+      # Try to access the 'M' and 'Cov' matrices
+      print("Dimensions of M matrix:")
+      print(dim(getMeth(combined_bsseq)))
+      print("Dimensions of Cov matrix:")
+      print(dim(getCoverage(combined_bsseq)))
 
       stop(e)
     }
