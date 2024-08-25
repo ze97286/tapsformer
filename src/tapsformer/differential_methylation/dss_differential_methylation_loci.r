@@ -51,7 +51,7 @@ gc()
 # generate a plot of top DMLs and their methylation levels in each sample
 plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
   # Get the raw methylation data
-  methylation_data <- getMeth(combined_bsseq, type = "raw")
+  methylation_data <- bsseq::getMeth(combined_bsseq, type = "raw")
   sample_names <- colnames(methylation_data)
   plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
 

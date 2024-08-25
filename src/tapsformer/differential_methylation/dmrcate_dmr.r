@@ -46,78 +46,29 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   print("Performing DMR analysis using DMRcate")
 
-  print(str(combined_bsseq))
+  # Directly use bsseq::getMeth
+  meth_data <- bsseq::getMeth(combined_bsseq)
+  cov_data <- bsseq::getCoverage(combined_bsseq)
 
-  methylation_data <- getMeth(combined_bsseq, type = "raw")
-  print("dim(methylation_data)", dim(methylation_data))
+  # Ensure that the sample names in combined_bsseq are correctly labeled
+  group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
+  group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # Get methylation and coverage data
-  meth_data <- getMeth(combined_bsseq, type = "raw")
-  cov_data <- getCoverage(combined_bsseq)
-
-  # Filter out low coverage sites
-  keep <- rowSums(cov_data >= 10) == ncol(cov_data)
-  meth_data_filtered <- meth_data[keep, ]
-  cov_data_filtered <- cov_data[keep, ]
-
-  # Create DGEList object
-  y <- DGEList(counts = meth_data_filtered, lib.size = colSums(cov_data_filtered))
-
-  # Normalize
-  y <- calcNormFactors(y)
-
-  # Create design matrix
-  group1 <- grep("tumour_", colnames(meth_data_filtered), value = TRUE)
-  group2 <- grep("control_", colnames(meth_data_filtered), value = TRUE)
+  # Design matrix for sequencing.annotate
   design <- model.matrix(~ 0 + factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
   colnames(design) <- c("tumour", "control")
 
-  # Create contrast matrix
+  # Create the contrast matrix
   cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
 
-  # Attempt to fit the model
-  v <- voom(y, design)
-  fit <- lmFit(v, design)
-
-  print("Dimensions after processing:")
-  print(dim(v$E))
-  print(dim(design))
-
-  # If successful, continue with contrast fit
-  fit2 <- contrasts.fit(fit, cont.matrix)
-  fit2 <- eBayes(fit2)
-
-  # Try to access the assays directly
-  print("Available assays:")
-  print(assayNames(combined_bsseq))
-
-  # If 'M' assay exists, print its dimensions
-  if ("M" %in% assayNames(combined_bsseq)) {
-    print("Dimensions of M assay:")
-    print(dim(assay(combined_bsseq, "M")))
-  }
-
-  # If 'Cov' assay exists, print its dimensions
-  if ("Cov" %in% assayNames(combined_bsseq)) {
-    print("Dimensions of Cov assay:")
-    print(dim(assay(combined_bsseq, "Cov")))
-  }
-
-  # Check if any assays exist
-  if (length(assayNames(combined_bsseq)) == 0) {
-    print("Warning: No assays found in the BSseq object")
-  }
-
-  # Create GRanges object
-  gr <- granges(combined_bsseq)
-
   # Create GenomicRatioSet
+  gr <- GenomicRanges::granges(combined_bsseq)
   grs <- GenomicRatioSet(
     gr = gr, beta = meth_data, M = cov_data,
-    colData = colData(combined_bsseq)
+    colData = SummarizedExperiment::colData(combined_bsseq)
   )
 
-  # Now try sequencing.annotate with this object
+  # Run sequencing.annotate
   myAnnotation <- sequencing.annotate(
     grs,
     methdesign = design,
@@ -127,74 +78,6 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
     fdr = fdr_threshold
   )
 
-
-  # Debug: Print sample names and dimensions of combined_bsseq
-  print("Sample names in combined_bsseq:")
-  print(sampleNames(combined_bsseq))
-  print(paste("Dimensions of combined_bsseq:", paste(dim(combined_bsseq), collapse = " x ")))
-
-  # Debug: Print more details about the BSseq object
-  print("Class of combined_bsseq:")
-  print(class(combined_bsseq))
-  print("Slots in combined_bsseq:")
-  print(slotNames(combined_bsseq))
-
-  # Check for empty CpG sites
-  print("Number of CpG sites with zero coverage across all samples:")
-  zero_coverage <- rowSums(getCoverage(combined_bsseq) == 0) == ncol(combined_bsseq)
-  print(sum(zero_coverage))
-
-  # Ensure that the sample names in combined_bsseq are correctly labeled
-  group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
-  group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
-
-  # Debug: Print group sizes
-  print(paste("Number of tumour samples:", length(group1)))
-  print(paste("Number of control samples:", length(group2)))
-
-  # Design matrix for sequencing.annotate
-  design <- model.matrix(~ 0 + factor(c(rep("tumour", length(group1)), rep("control", length(group2)))))
-  colnames(design) <- c("tumour", "control")
-
-  # Debug: Print design matrix
-  print("Design matrix:")
-  print(design)
-
-  # Create the contrast matrix
-  cont.matrix <- makeContrasts(TumourVsControl = tumour - control, levels = design)
-
-  # Run sequencing.annotate for DMRcate analysis
-  print("Running sequencing.annotate...")
-
-  tryCatch(
-    {
-      myAnnotation <- sequencing.annotate(
-        obj = combined_bsseq,
-        methdesign = design,
-        contrasts = TRUE,
-        cont.matrix = cont.matrix,
-        coef = "TumourVsControl",
-        fdr = fdr_threshold
-      )
-      print("sequencing.annotate completed successfully")
-    },
-    error = function(e) {
-      print("Error occurred in sequencing.annotate:")
-      print(e)
-
-      # Print more information about combined_bsseq
-      print("Summary of combined_bsseq:")
-      print(summary(combined_bsseq))
-
-      # Try to access the 'M' and 'Cov' matrices
-      print("Dimensions of M matrix:")
-      print(dim(getMeth(combined_bsseq)))
-      print("Dimensions of Cov matrix:")
-      print(dim(getCoverage(combined_bsseq)))
-
-      stop(e)
-    }
-  )
   # Perform DMR analysis using DMRcate
   print("Calling DMRs with DMRcate")
   dmrcoutput <- dmrcate(
@@ -206,8 +89,7 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   # Extract and filter the DMRs
   print("Extracting and filtering DMRs")
-  dmrs <- extractRanges(dmrcoutput, delta = delta, genome = "hg38")
-
+  dmrs <- extractRanges(dmrcoutput, delta = delta)
   # Filter for hypomethylated regions
   print("Filtering for hypomethylated DMRs")
   dmrs_hypo <- dmrs[dmrs$stat < 0]
