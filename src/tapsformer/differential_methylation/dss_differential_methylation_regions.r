@@ -76,6 +76,17 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
   print(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
 }
 
+create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir,prefix, n) {
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 10, prefix = prefix)
+  create_volcano_plot(top_hypo_dmrs, diff_col = "diff.Methy", pval_col = "pval", output_dir, prefix = prefix)
+  create_methylation_diff_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
+  create_chromosome_coverage_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
+  create_dmr_length_plot(top_hypo_dmrs, output_dir, prefix = prefix)
+  create_manhattan_plot(top_hypo_dmrs, output_dir, prefix = prefix)
+  create_qq_plot(top_hypo_dmrs, output_dir, prefix = prefix)
+  create_genomic_context_visualization(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
+}
+
 # this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
 # saving the output and visualisations.
 perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl) {
@@ -180,17 +191,6 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss_",n=10)
   print("DSS Analysis complete")
   return(dmr_dt)
-}
-
-create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir,prefix, n) {
-  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 10, prefix = prefix)
-  create_volcano_plot(top_hypo_dmrs, diff_col = "diff.Methy", pval_col = "pval", output_dir, prefix = prefix)
-  create_methylation_diff_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
-  create_chromosome_coverage_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
-  create_dmr_length_plot(top_hypo_dmrs, output_dir, prefix = prefix)
-  create_manhattan_plot(top_hypo_dmrs, output_dir, prefix = prefix)
-  create_qq_plot(top_hypo_dmrs, output_dir, prefix = prefix)
-  create_genomic_context_visualization(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
 }
 
 perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
