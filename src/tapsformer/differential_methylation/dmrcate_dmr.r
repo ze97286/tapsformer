@@ -46,9 +46,10 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   print("Performing DMR analysis using DMRcate")
 
-  # Debug: Print sample names
+  # Debug: Print sample names and dimensions of combined_bsseq
   print("Sample names in combined_bsseq:")
   print(sampleNames(combined_bsseq))
+  print(paste("Dimensions of combined_bsseq:", paste(dim(combined_bsseq), collapse = " x ")))
 
   # Ensure that the sample names in combined_bsseq are correctly labeled
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
@@ -79,15 +80,38 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
 
   # Run sequencing.annotate for DMRcate analysis
   print("Running sequencing.annotate...")
-  myAnnotation <- sequencing.annotate(
-    obj = combined_bsseq,
-    methdesign = design,
-    contrasts = TRUE,
-    cont.matrix = cont.matrix,
-    coef = "TumourVsControl", # Must match the contrast name in cont.matrix
-    fdr = fdr_threshold
-  )
 
+  tryCatch(
+    {
+      myAnnotation <- sequencing.annotate(
+        obj = combined_bsseq,
+        methdesign = design,
+        contrasts = TRUE,
+        cont.matrix = cont.matrix,
+        coef = "TumourVsControl",
+        fdr = fdr_threshold
+      )
+      print("sequencing.annotate completed successfully")
+    },
+    error = function(e) {
+      print("Error occurred in sequencing.annotate:")
+      print(e)
+
+      # Print more information about combined_bsseq
+      print("Summary of combined_bsseq:")
+      print(summary(combined_bsseq))
+
+      # If possible, try to access the 'M' and 'Cov' matrices
+      if (is(combined_bsseq, "BSseq")) {
+        print("Dimensions of M matrix:")
+        print(dim(getMeth(combined_bsseq, type = "raw")))
+        print("Dimensions of Cov matrix:")
+        print(dim(getCoverage(combined_bsseq)))
+      }
+
+      stop(e)
+    }
+  )
   # Perform DMR analysis using DMRcate
   print("Calling DMRs with DMRcate")
   dmrcoutput <- dmrcate(
