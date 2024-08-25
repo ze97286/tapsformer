@@ -76,7 +76,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
   print(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
 }
 
-create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir,prefix, n) {
+create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, prefix, n) {
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 10, prefix = prefix)
   create_volcano_plot(top_hypo_dmrs, diff_col = "diff.Methy", pval_col = "pval", output_dir, prefix = prefix)
   create_methylation_diff_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
@@ -188,7 +188,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
 
   # Visualizations
   print("Creating visualizations")
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss_",n=10)
+  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss_", n = 10)
   print("DSS Analysis complete")
   return(dmr_dt)
 }
@@ -203,21 +203,24 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
                                         p_threshold = 0.05,
                                         fdr_threshold = 0.05) {
   print("starting bumphunter analysis")
-  # Extract necessary data from BSseq object
-  gr <- granges(combined_bsseq)
-  meth_mat <- getMeth(combined_bsseq, type = "raw")
+
+  # Convert BSseq to GenomicRatioSet
+  gr_set <- makeGenomicRatioSetFromMatrix(getMeth(combined_bsseq, type = "Beta"),
+    gr = granges(combined_bsseq),
+    pData = pData(combined_bsseq)
+  )
 
   # Create design matrix
-  sample_groups <- ifelse(grepl("tumour_", colnames(meth_mat)), 1, 0)
+  sample_groups <- ifelse(grepl("tumour_", colnames(getMeth(combined_bsseq, type = "raw"))), 1, 0)
   design <- model.matrix(~sample_groups)
 
   # Run bumphunter
-  bumps <- bumphunter(gr, meth_mat, design,
+  bumps <- bumphunter(gr_set, design,
     cutoff = cutoff,
     B = B,
     maxGap = maxGap,
-    minInSpan = minCpGs,
-    smooth = TRUE
+    smooth = TRUE,
+    verbose = TRUE
   )
 
   print("finished bump hunter - analysis starting filtering")
@@ -258,8 +261,9 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
 
   # Save full results as RDS
   saveRDS(dmr_dt, file.path(output_dir, "bumphunter_hypomethylated_dmrs.rds"))
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "bumphunter_",n=10)
+  create_visualisations(dmr_dt, combined_bsseq, output_dir, "bumphunter_", n = 10)
   print("finished bumphunter")
+
   return(dmr_dt)
 }
 
@@ -317,8 +321,8 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
   saveRDS(dmr_dt, file.path(output_dir, "dmrseq_hypomethylated_dmrs.rds"))
 
   print(sprintf("DMRSeq analysis identified %d significant hypomethylated DMRs", nrow(dmr_dt)))
-  print("dmrseq visualisation")  
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dmrseq_",n=10)
+  print("dmrseq visualisation")
+  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dmrseq_", n = 10)
   print("finished dmrseq")
 }
 
@@ -333,19 +337,6 @@ output_dir <- file.path(base_dir, sprintf(
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
 ))
 
-result <- perform_dmr_analysis(combined_bsseq, base_dir, output_dir,
-  delta = delta,
-  p.threshold = p.threshold,
-  fdr.threshold = fdr.threshold,
-  min.CpG = min.CpG,
-  min.len = min.len,
-  dis.merge = dis.merge,
-  smoothing = smoothing,
-  cl = cl
-)
-
-stopCluster(cl)
-
 print("running bump hunter analysis")
 bumphunter_results <- perform_bumphunter_analysis(
   combined_bsseq,
@@ -358,12 +349,26 @@ bumphunter_results <- perform_bumphunter_analysis(
 
 print("running dmrseq analysis")
 dmrseq_results <- perform_dmrseq_analysis(
-  combined_bsseq, 
-  output_dir, 
+  combined_bsseq,
+  output_dir,
   p_threshold = p.threshold,
   beta_threshold = -delta,
   minCpGs = min.CpG,
 )
+
+print("running dss analysis")
+result <- perform_dmr_analysis(combined_bsseq, base_dir, output_dir,
+  delta = delta,
+  p.threshold = p.threshold,
+  fdr.threshold = fdr.threshold,
+  min.CpG = min.CpG,
+  min.len = min.len,
+  dis.merge = dis.merge,
+  smoothing = smoothing,
+  cl = cl
+)
+
+stopCluster(cl)
 
 end_time <- Sys.time()
 print(paste("Total runtime:", difftime(end_time, start_time, units = "mins"), "minutes"))
