@@ -83,12 +83,11 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 
 perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
                                     testCovariate = "condition",
-                                    p_threshold = 0.05,
+                                    cutoff = 0.05,
                                     beta_threshold = -0.4, # For hypomethylation
                                     minNumRegion = 5,
-                                    minCpGs = 3,
-                                    maxGap = 1000,
-                                    maxPerms = 10) {
+                                    maxGap = 1000
+                                    ) {
   print("starting dmrseq analysis")
   sampleNames(combined_bsseq) <- gsub("tumour_", "tumour_", sampleNames(combined_bsseq))
 
@@ -98,12 +97,10 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
   # Run DMRseq
   dmrs <- dmrseq(
     bs = combined_bsseq,
-    cutoff = p_threshold,
+    cutoff = cutoff,
     testCovariate = testCovariate,
     minNumRegion = minNumRegion,
-    minCpGs = minCpGs,
     maxGap = maxGap,
-    maxPerms = maxPerms
   )
 
   print("finished initial dmrseq analysis")
@@ -156,9 +153,9 @@ print("running dmrseq analysis")
 dmrseq_results <- perform_dmrseq_analysis(
   combined_bsseq,
   output_dir,
-  p_threshold = p.threshold,
   beta_threshold = -delta,
   minCpGs = min.CpG,
+  maxGap = dis.merge,
 )
 
 stopCluster(cl)
