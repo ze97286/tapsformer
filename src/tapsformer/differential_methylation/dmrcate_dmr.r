@@ -47,7 +47,7 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   print("Performing DMR analysis using DMRcate")
 
   # Directly use bsseq::getMeth
-  meth_data <- bsseq::getMeth(combined_bsseq)
+  meth_data <- bsseq::getMeth(combined_bsseq, type = "raw")
   cov_data <- bsseq::getCoverage(combined_bsseq)
 
   # Ensure that the sample names in combined_bsseq are correctly labeled
