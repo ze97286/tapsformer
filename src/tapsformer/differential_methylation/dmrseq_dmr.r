@@ -83,17 +83,17 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 
 perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
                                     cutoff = 0.05,
+                                    p_threshold = 1e-3,
                                     beta_threshold = -0.4, # For hypomethylation
                                     minNumRegion = 5,
-                                    maxGap = 1000
-                                    ) {
+                                    maxGap = 1000) {
   print("starting dmrseq analysis")
   sampleNames(combined_bsseq) <- gsub("tumour_", "tumour_", sampleNames(combined_bsseq))
 
   # Create condition vector
   condition <- factor(ifelse(grepl("tumour_", sampleNames(combined_bsseq)), "tumour", "control"))
   colData(combined_bsseq)$condition <- condition
-  
+
   # Run DMRseq
   dmrs <- dmrseq(
     bs = combined_bsseq,
@@ -101,12 +101,22 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
     testCovariate = "condition",
     minNumRegion = minNumRegion,
     maxGap = maxGap,
+    maxPerms = 1, # TEMP TEMP TEMP - change to 10 later.
   )
 
   print("finished initial dmrseq analysis")
 
-  # Convert to data.table and filter for significant hypomethylated DMRs
-  dmr_dt <- as.data.table(dmrs)
+  # Convert GRanges object to data.frame and extract relevant metadata columns
+  dmr_df <- as.data.frame(mcols(dmrs))
+  dmr_df <- cbind(as.data.frame(dmrs), dmr_df)
+
+  # Check if pval and beta columns exist
+  if (!("pval" %in% colnames(dmr_df)) || !("beta" %in% colnames(dmr_df))) {
+    stop("Expected columns 'pval' or 'beta' not found in the DMR results.")
+  }
+
+  # Filter for significant hypomethylated DMRs and select specific columns
+  dmr_dt <- as.data.table(dmr_df)
   dmr_dt <- dmr_dt[pval <= p_threshold & beta < beta_threshold, .(
     chr = seqnames,
     start = start,
@@ -122,7 +132,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
   # Add hypomethylation flag (all should be TRUE at this point)
   dmr_dt[, hypo_in_tumour := TRUE]
 
-  print(sprintf("dmrseq Identified %d high-confidence hypomethylated DMRs", nrow(dmr_dt)))
+  print(sprintf("dmrseq identified %d high-confidence hypomethylated DMRs", nrow(dmr_dt)))
 
   # Save as BED file
   bed_file <- file.path(output_dir, "dmrseq_high_confidence_hypomethylated_dmrs.bed")
@@ -133,7 +143,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
 
   print(sprintf("DMRSeq analysis identified %d significant hypomethylated DMRs", nrow(dmr_dt)))
   print("dmrseq visualisation")
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dmrseq", n = 10)
+  create_visualisations(dmr_dt, combined_bsseq, output_dir, "dmrseq", n = 10)
   print("finished dmrseq")
 }
 
@@ -153,6 +163,7 @@ print("running dmrseq analysis")
 dmrseq_results <- perform_dmrseq_analysis(
   combined_bsseq,
   output_dir,
+  p_threshold = p.threshold,
   beta_threshold = -delta,
   minNumRegion = min.CpG,
   maxGap = dis.merge,
