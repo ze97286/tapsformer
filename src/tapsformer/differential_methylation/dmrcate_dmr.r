@@ -41,7 +41,7 @@ print("Starting dmrcate analysis")
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
 gc()
 
-perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.threshold, lambda, C = 2) {
+perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, C = 2) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   print("Performing DMR analysis using DMRcate")
@@ -55,29 +55,28 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, p.thresh
   # Annotate CpGs with the design matrix
   print("Annotating CpGs for DMRcate")
   myAnnotation <- cpg.annotate(
-    object = combined_bsseq,
-    datatype = "BS",
-    what = "Beta", 
-    analysis.type = "differential",
-    design = design,
-    contrasts = TRUE,
-    cont.matrix = "TumourVsControl",
-    coef = 2
+      object = combined_bsseq,
+      datatype = "sequencing",  # Correctly specify sequencing data
+      what = "Beta",            # or "M" depending on your data
+      analysis.type = "differential",
+      design = design,
+      contrasts = TRUE,
+      cont.matrix = "TumourVsControl",
+      coef = 2
   )
 
   # Perform DMR analysis using DMRcate
   print("Calling DMRs with DMRcate")
   dmrcoutput <- dmrcate(
-    object = myAnnotation,
-    lambda = lambda,
-    C = C,
-    p.adjust.method = "BH",
-    p.threshold = p.threshold
+      object = myAnnotation,
+      lambda = lambda,
+      C = C,
+      min.cpgs = 3,
   )
 
   # Extract and filter the DMRs
   print("Extracting and filtering DMRs")
-  dmrs <- extractRanges(dmrcoutput, delta = delta, minlen = 3) # Adjust `minlen` as necessary
+  dmrs <- extractRanges(dmrcoutput, delta = delta,genome="hg38") # Adjust `minlen` as necessary
 
   # Filter for hypomethylated regions
   print("Filtering for hypomethylated DMRs")
@@ -128,7 +127,6 @@ perform_dmrcate_analysis(
   combined_bsseq, # Your BSseq object
   output_dir = output_dir,
   delta = delta,
-  p.threshold = p.threshold, # P-value threshold
   lambda = 500, # Smoothing parameter
   C = 2 # Clustering parameter
 )
