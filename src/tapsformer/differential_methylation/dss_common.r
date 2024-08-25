@@ -135,7 +135,7 @@ analyze_areastat_thresholds <- function(top_hypo_dmxs, column_name, output_dir) 
 }
 
 # Volcano plot
-create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, prefix = "dss_") {
+create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, prefix = "dss") {
     if (pval_col %in% names(dmx_dt)) {
         print("Creating volcano plot")
         safe_plot(
@@ -165,7 +165,7 @@ create_volcano_plot <- function(dmx_dt, diff_col, pval_col, output_dir, prefix =
 }
 
 # Methylation difference distribution plot
-create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, prefix = "dss_") {
+create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, prefix = "dss") {
     print("Creating methylation difference distribution plot")
     safe_plot(
         file.path(output_dir, prefix, "methylation_difference_distribution.svg"),
@@ -184,7 +184,7 @@ create_methylation_diff_plot <- function(dmx_dt, diff_col, output_dir, prefix = 
     return(TRUE)
 }
 
-create_dmr_length_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
+create_dmr_length_plot <- function(dmx_dt, output_dir, prefix = "dss") {
     print("Creating DMR length distribution plot")
     safe_plot(
         file.path(output_dir, "dmr_length_distribution.svg"),
@@ -260,7 +260,7 @@ create_chromosome_coverage_plot <- function(dmx_dt, diff_col, output_dir, prefix
 }
 
 # Manhattan plot
-create_manhattan_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
+create_manhattan_plot <- function(dmx_dt, output_dir, prefix = "dss") {
     print("Creating Manhattan plot")
     # Create a data frame with chromosome sizes
     chr_sizes <- data.frame(
@@ -307,7 +307,7 @@ create_manhattan_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
 }
 
 # Q-Q Plot
-create_qq_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
+create_qq_plot <- function(dmx_dt, output_dir, prefix = "dss") {
     print("Creating Q-Q plot")
     safe_plot(
         file.path(output_dir, prefix, "qq_plot.svg"),
@@ -331,7 +331,7 @@ create_qq_plot <- function(dmx_dt, output_dir, prefix = "dss_") {
 }
 
 # Pie chart of genomic context of differentially methylated regions/loci
-create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, prefix="dss_") {
+create_genomic_context_visualization <- function(dmx_dt, diff_col, output_dir, prefix="dss") {
     print("Annotating regions with genomic context")
     if (!("start" %in% colnames(dmx_dt)) || !("end" %in% colnames(dmx_dt))) {
         dmx_dt[, start := pos]

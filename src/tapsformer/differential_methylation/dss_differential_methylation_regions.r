@@ -204,19 +204,16 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
                                         fdr_threshold = 0.05) {
   print("starting bumphunter analysis")
 
-  # Convert BSseq to GenomicRatioSet
-  gr_set <- makeGenomicRatioSetFromMatrix(
-    getMeth(combined_bsseq, type = "Beta"),
-    pData = pData(combined_bsseq),
-    gr = granges(combined_bsseq)
-  )
+  combined_bsseq <- BSmooth(combined_bsseq)
 
   # Create design matrix
-  sample_groups <- ifelse(grepl("tumour_", colnames(getMeth(combined_bsseq, type = "raw"))), 1, 0)
+  sample_groups <- ifelse(grepl("tumour_", colnames(pData(combined_bsseq)$colname)), 1, 0)
   design <- model.matrix(~sample_groups)
 
   # Run bumphunter
-  bumps <- bumphunter(gr_set, design,
+  bumps <- bumphunter(
+    bsseq = combined_bsseq,
+    design = design,
     cutoff = cutoff,
     B = B,
     maxGap = maxGap,
@@ -262,7 +259,7 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
 
   # Save full results as RDS
   saveRDS(dmr_dt, file.path(output_dir, "bumphunter_hypomethylated_dmrs.rds"))
-  create_visualisations(dmr_dt, combined_bsseq, output_dir, "bumphunter_", n = 10)
+  create_visualisations(dmr_dt, combined_bsseq, output_dir, "bumphunter", n = 10)
   print("finished bumphunter")
 
   return(dmr_dt)
@@ -323,7 +320,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
 
   print(sprintf("DMRSeq analysis identified %d significant hypomethylated DMRs", nrow(dmr_dt)))
   print("dmrseq visualisation")
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dmrseq_", n = 10)
+  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dmrseq", n = 10)
   print("finished dmrseq")
 }
 
