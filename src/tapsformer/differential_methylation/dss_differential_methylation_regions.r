@@ -204,24 +204,31 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
                                         fdr_threshold = 0.05) {
   print("starting bumphunter analysis")
 
+  # Ensure combined_bsseq is smoothed
   combined_bsseq <- BSmooth(combined_bsseq)
 
   # Create design matrix
-  sample_groups <- ifelse(grepl("tumour_", colnames(pData(combined_bsseq)$colname)), 1, 0)
+  sample_groups <- ifelse(grepl("tumour_", colnames(getMeth(combined_bsseq))), 1, 0)
   design <- model.matrix(~sample_groups)
+
+  # Get methylation data and genomic locations
+  meth_mat <- getMeth(combined_bsseq, type = "Beta")
+  gr <- granges(combined_bsseq)
 
   # Run bumphunter
   bumps <- bumphunter(
-    bsseq = combined_bsseq,
+    object = gr,
     design = design,
+    coef = 2,
     cutoff = cutoff,
     B = B,
     maxGap = maxGap,
     smooth = TRUE,
+    smoothFunction = loessByCluster,
     verbose = TRUE
   )
 
-  print("finished bump hunter - analysis starting filtering")
+  print("finished bumphunter - analysis starting filtering")
 
   # Convert to data.table and filter for significant hypomethylated DMRs
   dmr_dt <- as.data.table(bumps$table)
@@ -233,7 +240,7 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
       (end - start + 1) >= minRegionLength &
       (end - start + 1) <= maxRegionLength,
     .(
-      chr = chr,
+      chr = seqnames,
       start = start,
       end = end,
       diff.Methy = value,
@@ -259,7 +266,7 @@ perform_bumphunter_analysis <- function(combined_bsseq, output_dir,
 
   # Save full results as RDS
   saveRDS(dmr_dt, file.path(output_dir, "bumphunter_hypomethylated_dmrs.rds"))
-  create_visualisations(dmr_dt, combined_bsseq, output_dir, "bumphunter", n = 10)
+  create_visualisations(dmr_dt, combined_bsseq, output_dir, "bumphunter_", n = 10)
   print("finished bumphunter")
 
   return(dmr_dt)
