@@ -56,7 +56,6 @@ perform_dmrcate_analysis <- function(combined_bsseq, output_dir, delta, lambda, 
   print("Annotating CpGs for DMRcate")
   myAnnotation <- cpg.annotate(
       object = combined_bsseq,
-      datatype = "sequencing",  # Correctly specify sequencing data
       what = "Beta",            # or "M" depending on your data
       analysis.type = "differential",
       design = design,
