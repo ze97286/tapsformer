@@ -412,6 +412,15 @@ output_dir <- file.path(base_dir, sprintf(
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
 ))
 
+print("running bump hunter analysis")
+bumphunter_results <- perform_bumphunter_analysis(
+  combined_bsseq,
+  output_dir,
+  fdr_threshold = fdr.threshold,
+  p_threshold = p.threshold,
+  minCpGs = min.CpG,
+  minRegionLength = min.len,
+)
 
 print("running bump hunter analysis")
 dmrcate_results <- perform_dmrcate_analysis(
@@ -423,19 +432,6 @@ dmrcate_results <- perform_dmrcate_analysis(
   C = 2,
   lambda = 500,
 )
-
-
-print("running bump hunter analysis")
-bumphunter_results <- perform_bumphunter_analysis(
-  combined_bsseq,
-  output_dir,
-  fdr_threshold = fdr.threshold,
-  p_threshold = p.threshold,
-  minCpGs = min.CpG,
-  minRegionLength = min.len,
-)
-
-
 
 print("running dmrseq analysis")
 dmrseq_results <- perform_dmrseq_analysis(
