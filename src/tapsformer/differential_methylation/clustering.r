@@ -103,6 +103,7 @@ hclust_res <- hclust(dist_matrix, method = "ward.D2") # Hierarchical clustering
 
 
 # Option 2: Create the heatmap without row clustering if the dataset is still large
+heatmap_file <- file.path(base_dir,paste(type_prefix,"_samples_heatmap.svg",sep=""))
 svg(heatmap_file, width = 8, height = 10)
 heatmap <- Heatmap(methylation_levels_for_heatmap,
     cluster_rows = FALSE, # Disable clustering on rows to avoid the error
