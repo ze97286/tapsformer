@@ -75,7 +75,7 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 perform_dmr_analysis <- function(
     combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, areaStat_percentile = 0.75,
     n_iterations = 5,
-    subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20) {
+    subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20, window_size = 500) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   print("Performing DMR analysis with DML pre-filtering")
@@ -115,7 +115,7 @@ perform_dmr_analysis <- function(
   dml_dt <- as.data.table(dml_test)
 
   z_score <- qnorm(0.975)
-  
+
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
     significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
@@ -230,7 +230,7 @@ print(sprintf(
 smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
 output_dir <- file.path(base_dir, sprintf(
   "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge,smoothing_string
+  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
 ))
 
 print("running dss analysis")
