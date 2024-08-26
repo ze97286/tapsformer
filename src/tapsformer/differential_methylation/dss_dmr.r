@@ -180,7 +180,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
 
   # Visualizations
   print("Creating visualizations")
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss_", n = 10)
+  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss_", n = 100)
   print("DSS Analysis complete")
   return(dmr_dt)
 }
