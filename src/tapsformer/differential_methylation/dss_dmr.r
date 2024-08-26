@@ -146,7 +146,7 @@ perform_dmr_analysis <- function(
 
   # Stage 6: Sliding window filter
   filtered_dmls <- sliding_window_filter(consistent_ci_diff_sig_hypo_dmls, window_size)
-  print(sprintf("DMLs after sliding window filter: %d", nrow(top_hypo_dmls)))
+  print(sprintf("DMLs after sliding window filter: %d", nrow(filtered_dmls)))
 
   strongest_dmls <- tail(filtered_dmls[order(filtered_dmls$stat), ], 500)
   str(strongest_dmls)
