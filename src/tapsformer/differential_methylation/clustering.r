@@ -24,7 +24,10 @@ bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
 
-base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/oac"
+args <- commandArgs(trailingOnly = TRUE)
+suffix <- args[1]
+
+base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg",suffix)
 subsampled_file <- file.path(base_dir,"tumour_subsampled_methylation_levels.rds")
 
 if (file.exists(subsampled_file)) {
