@@ -24,7 +24,28 @@ bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
 
-base_dir <- "/Users/zoharetzioni/Downloads/methylation_clustering"
+load_and_create_bsseq <- function(base_dir, prefix) {
+    sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
+    if (length(sample_files) == 0) {
+        stop("Error: No RDS files found with the given prefix.")
+    }
+    bsseq_list <- lapply(sample_files, function(file_path) {
+        sample_data <- readRDS(file_path)
+        sample_name <- gsub("\\.rds$", "", basename(file_path))
+        BSseq(
+            chr = sample_data$chr,
+            pos = sample_data$pos,
+            M = as.matrix(sample_data$X),
+            Cov = as.matrix(sample_data$N),
+            sampleNames = sample_name
+        )
+    })
+
+    combined_bsseq <- do.call(combineList, bsseq_list)
+    return(combined_bsseq)
+}
+
+base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/full"
 tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
 methylation_levels <- bsseq::getMeth(tumour_bsseq, type = "raw")
 
