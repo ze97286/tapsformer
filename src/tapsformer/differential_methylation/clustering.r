@@ -24,6 +24,8 @@ bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
 
+base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/oac"
+
 load_and_create_bsseq <- function(base_dir, prefix) {
     sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
     if (length(sample_files) == 0) {
@@ -50,34 +52,31 @@ load_and_create_bsseq <- function(base_dir, prefix) {
     return(combined_bsseq)
 }
 
-base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/oac"
 tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
-print("tumour data loaded")
 
-# Step 2: Subsample or filter data to reduce size
+# Step 2: Subsample CpG sites to reduce the size of the dataset
+set.seed(123)  # For reproducibility
+num_sites_to_keep <- 10000  # Define a smaller number of CpG sites to keep
+
+# Randomly select a subset of CpG sites
+total_sites <- nrow(tumour_bsseq)
+subset_indices <- sample(1:total_sites, min(num_sites_to_keep, total_sites))
+
 methylation_levels <- getMeth(tumour_bsseq, type = "raw")
+methylation_levels_subset <- methylation_levels[subset_indices, ]
 
-# Remove rows with NA or NaN values
-methylation_levels <- na.omit(methylation_levels)
+# Step 3: Filter out rows with NA or NaN values
+methylation_levels_subset <- na.omit(methylation_levels_subset)
 
-# Optionally, filter out rows (CpG sites) with low variance
-var_filter <- apply(methylation_levels, 1, var, na.rm = TRUE)
-
-# Handle any potential NaN values in var_filter
-var_filter <- var_filter[!is.na(var_filter)]
-
-high_var_sites <- var_filter > quantile(var_filter, 0.9, na.rm = TRUE)  # Keep top 10% of most variable sites
-methylation_levels_filtered <- methylation_levels[high_var_sites, ]
-
-# Step 3: Proceed with clustering and visualization
-dist_matrix <- dist(t(methylation_levels_filtered))  # Distance matrix for samples
+# Step 4: Proceed with clustering and visualization on the subset
+dist_matrix <- dist(t(methylation_levels_subset))  # Distance matrix for samples
 hclust_res <- hclust(dist_matrix, method = "ward.D2")  # Hierarchical clustering
 
 # Step 5: Save the heatmap to an SVG file
 heatmap_file <- file.path(base_dir, "tumour_samples_heatmap.svg")
 svg(heatmap_file, width = 8, height = 10)
 
-heatmap <- Heatmap(methylation_levels_filtered,
+heatmap <- Heatmap(methylation_levels_subset,
                    cluster_columns = hclust_res, # Clustering applied to columns (samples)
                    show_row_dend = FALSE, 
                    show_column_names = TRUE,
@@ -85,49 +84,29 @@ heatmap <- Heatmap(methylation_levels_filtered,
 
 draw(heatmap)
 dev.off()
-
 print("heatmap saved")
 
+# Step 6: Optional - Dimensionality Reduction and Visualization
+# Save PCA plot to SVG to visualize sample distribution in 2D
+pca_res <- prcomp(t(methylation_levels_subset), scale. = TRUE)
+pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels_subset))
+pca_file <- file.path(base_dir, "tumour_samples_pca.svg")
+svg(pca_file, width = 8, height = 8)
+ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
+    geom_point(size = 3) +
+    geom_text(hjust = 1.5, vjust = 1.5) +
+    theme_minimal() +
+    labs(title = "PCA of Tumour Samples")
+dev.off()
 
-# # Optional: Subset data for better visualization if too many CpGs
-# # methylation_levels_subset <- methylation_levels[sample(1:nrow(methylation_levels), 1000),]
-
-# heatmap <- Heatmap(methylation_levels,
-#                    cluster_rows = hclust_res,
-#                    show_row_dend = FALSE,
-#                    show_column_names = FALSE,
-#                    column_title = "Hierarchical Clustering of Tumour Samples")
-
-# draw(heatmap)
-# dev.off()
-
-# print("Hierarchical Clustering of Tumour Samples saved")
-
-# # Step 4: Optional - Dimensionality Reduction and Visualization
-# # Save PCA plot to SVG
-# pca_res <- prcomp(t(methylation_levels), scale. = TRUE)
-# pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels))
-# pca_file <- file.path(base_dir,"tumour_samples_pca.svg")
-# svg(pca_file, width = 8, height = 8)
-# ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
-#     geom_point(size = 3) +
-#     geom_text(hjust = 1.5, vjust = 1.5) +
-#     theme_minimal() +
-#     labs(title = "PCA of Tumour Samples")
-# dev.off()
-
-# print("pca saved")
-
-# # Save t-SNE plot to SVG
-# tsne_res <- Rtsne(t(methylation_levels), dims = 2, perplexity = 30)
-# tsne_df <- data.frame(tsne_res$Y, Sample = colnames(methylation_levels))
-# tsne_file <- file.path(base_dir,"tumour_samples_tsne.svg")
-# svg(tsne_file, width = 8, height = 8)
-# ggplot(tsne_df, aes(X1, X2, label = Sample)) +
-#     geom_point(size = 3) +
-#     geom_text(hjust = 1.5, vjust = 1.5) +
-#     theme_minimal() +
-#     labs(title = "t-SNE of Tumour Samples")
-# dev.off()
-
-# print("t-SNE saved")
+# Save t-SNE plot to SVG to visualize non-linear relationships
+tsne_res <- Rtsne(t(methylation_levels_subset), dims = 2, perplexity = 30)
+tsne_df <- data.frame(tsne_res$Y, Sample = colnames(methylation_levels_subset))
+tsne_file <- file.path(base_dir, "tumour_samples_tsne.svg")
+svg(tsne_file, width = 8, height = 8)
+ggplot(tsne_df, aes(X1, X2, label = Sample)) +
+    geom_point(size = 3) +
+    geom_text(hjust = 1.5, vjust = 1.5) +
+    theme_minimal() +
+    labs(title = "t-SNE of Tumour Samples")
+dev.off()
