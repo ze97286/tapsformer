@@ -19,7 +19,7 @@ bioc_install_and_load <- function(pkg) {
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 bioc_packages <- c("ComplexHeatmap", "bsseq")
-cran_packages <- c("cluster", "Rtsne", "ggplot2")
+cran_packages <- c("cluster", "Rtsne", "ggplot2", "ggrepel")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
@@ -106,21 +106,20 @@ draw(heatmap)
 dev.off()
 print("heatmap saved")
 
-# Step 6: Optional - Dimensionality Reduction and Visualization
-# Save PCA plot to SVG to visualize sample distribution in 2D
+# Step 6: PCA plot with ggrepel to avoid label overlap
 pca_res <- prcomp(t(methylation_levels_subset), scale. = FALSE)
 pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels_subset))
 pca_file <- file.path(base_dir,paste(type_prefix,"_samples_pca.svg",sep=""))
 svg(pca_file, width = 8, height = 8)
 ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
     geom_point(size = 3) +
-    geom_text(hjust = 1.5, vjust = 1.5) +
+    geom_text_repel() +  # Use geom_text_repel to avoid overlap
     theme_minimal() +
     labs(title = sprintf("PCA of %s Samples",type_prefix))
 dev.off()
-
 print("pca saved")
 
+# Step 7: t-SNE with adjusted perplexity and ggrepel to avoid label overlap
 # Get the number of samples
 num_samples <- ncol(methylation_levels_subset)
 
@@ -134,10 +133,9 @@ tsne_file <- file.path(base_dir,paste(type_prefix,"_samples_tsne.svg", sep=""))
 svg(tsne_file, width = 8, height = 8)
 ggplot(tsne_df, aes(X1, X2, label = Sample)) +
     geom_point(size = 3) +
-    geom_text(hjust = 1.5, vjust = 1.5) +
+    geom_text_repel() + 
     theme_minimal() +
     labs(title = sprintf("t-SNE of %s Samples",type_prefix))
 dev.off()
-
 
 print("t-SNE saved")
