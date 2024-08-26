@@ -13,7 +13,7 @@ fdr.threshold <- as.numeric(args[3])
 min.CpG <- as.numeric(args[4])
 min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
-suffix <- args[8]
+suffix <- args[7]
 
 # setup parallel processing
 library(parallel)
