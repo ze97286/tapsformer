@@ -50,7 +50,7 @@ combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
 gc()
 
 # generate a plot of top DMRs and their methylation levels in each sample
-plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext = 0, prefix = "dss_") {
+plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext = 0, prefix = "dss") {
   dmr_plot_dir <- file.path(output_dir, prefix, "strongest_hypomethylated_dmr_plots")
   dir.create(dmr_plot_dir, showWarnings = FALSE, recursive = TRUE)
 
