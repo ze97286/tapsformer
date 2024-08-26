@@ -29,7 +29,7 @@ suffix <- args[1]
 type_prefix <- args[2]
 
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg",suffix)
-subsampled_file <- file.path(base_dir,paste(type_prefix,"_subsampled_methylation_levels.rds"))
+subsampled_file <- file.path(base_dir,paste(type_prefix,"_subsampled_methylation_levels.rds",sep=""))
 print(subsampled_file)
 
 if (file.exists(subsampled_file)) {
