@@ -66,18 +66,18 @@ if (file.exists(subsampled_file)) {
     }
 
     print("creating data set")
-    tumour_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
-    print("tumour data loaded")
+    type_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
+    print(type_prefix,"data loaded")
 
     # Step 2: Subsample CpG sites to reduce the size of the dataset
     set.seed(123)  # For reproducibility
     num_sites_to_keep <- 10000  # Define a smaller number of CpG sites to keep
 
     # Randomly select a subset of CpG sites
-    total_sites <- nrow(tumour_bsseq)
+    total_sites <- nrow(type_bsseq)
     subset_indices <- sample(1:total_sites, min(num_sites_to_keep, total_sites))
 
-    methylation_levels <- getMeth(tumour_bsseq, type = "raw")
+    methylation_levels <- getMeth(type_bsseq, type = "raw")
     methylation_levels_subset <- methylation_levels[subset_indices, ]
 
     # Step 3: Filter out rows with NA or NaN values
@@ -93,14 +93,14 @@ dist_matrix <- dist(t(methylation_levels_subset))  # Distance matrix for samples
 hclust_res <- hclust(dist_matrix, method = "ward.D2")  # Hierarchical clustering
 
 # Step 5: Save the heatmap to an SVG file
-heatmap_file <- file.path(base_dir,paste(type_prefix,"_samples_heatmap.svg"))
+heatmap_file <- file.path(base_dir,paste(type_prefix,"_samples_heatmap.svg",sep=""))
 svg(heatmap_file, width = 8, height = 10)
 
 heatmap <- Heatmap(methylation_levels_subset,
                    cluster_columns = hclust_res, # Clustering applied to columns (samples)
                    show_row_dend = FALSE, 
                    show_column_names = TRUE,
-                   column_title = "Hierarchical Clustering of Tumour Samples")
+                   column_title = sprintf("Hierarchical Clustering of %s Samples",type_prefix))
 
 draw(heatmap)
 dev.off()
@@ -110,32 +110,34 @@ print("heatmap saved")
 # Save PCA plot to SVG to visualize sample distribution in 2D
 pca_res <- prcomp(t(methylation_levels_subset), scale. = FALSE)
 pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels_subset))
-pca_file <- file.path(base_dir,paste(type_prefix,"_samples_pca.svg"))
+pca_file <- file.path(base_dir,paste(type_prefix,"_samples_pca.svg",sep=""))
 svg(pca_file, width = 8, height = 8)
 ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
     geom_point(size = 3) +
     geom_text(hjust = 1.5, vjust = 1.5) +
     theme_minimal() +
-    labs(title = "PCA of Tumour Samples")
+    labs(title = sprintf("PCA of %s Samples",type_prefix))
 dev.off()
 
 print("pca saved")
 
+# Get the number of samples
 num_samples <- ncol(methylation_levels_subset)
 
-# Set perplexity to a value less than the number of samples
-perplexity_value <- min(30, num_samples - 1)  # Ensure perplexity is not greater than the number of samples
+# Set a very conservative perplexity value based on the number of samples
+perplexity_value <- min(10, floor((num_samples - 1) / 3))  # A safer approach, ensuring perplexity is much smaller than the number of samples
 
-# Run t-SNE with adjusted perplexity
+# Run t-SNE with the adjusted perplexity
 tsne_res <- Rtsne(t(methylation_levels_subset), dims = 2, perplexity = perplexity_value)
 tsne_df <- data.frame(tsne_res$Y, Sample = colnames(methylation_levels_subset))
-tsne_file <- file.path(base_dir, paste(type_prefix,"_samples_tsne.svg"))
+tsne_file <- file.path(base_dir,paste(type_prefix,"_samples_tsne.svg", sep=""))
 svg(tsne_file, width = 8, height = 8)
 ggplot(tsne_df, aes(X1, X2, label = Sample)) +
     geom_point(size = 3) +
     geom_text(hjust = 1.5, vjust = 1.5) +
     theme_minimal() +
-    labs(title = "t-SNE of Tumour Samples")
+    labs(title = sprintf("t-SNE of %s Samples",type_prefix))
 dev.off()
+
 
 print("t-SNE saved")
