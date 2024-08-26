@@ -4,8 +4,8 @@ source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 7) {
-  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <suffix>")
+if (length(args) != 8) {
+  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <smoothing> <suffix>")
 }
 delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
@@ -13,7 +13,12 @@ fdr.threshold <- as.numeric(args[3])
 min.CpG <- as.numeric(args[4])
 min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
-suffix <- args[7]
+smoothing_arg <- tolower(args[7])
+smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false") FALSE else NA
+if (is.na(smoothing)) {
+  stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
+}
+suffix <- args[8]
 
 # setup parallel processing
 library(parallel)
@@ -68,7 +73,7 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 
 # Perform DMR analysis + FDR correction, choosing hypomethylated DMRs and saving the output and visualisations.
 perform_dmr_analysis <- function(
-    combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl, areaStat_percentile = 0.75,
+    combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, areaStat_percentile = 0.75,
     n_iterations = 5,
     subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
@@ -101,12 +106,12 @@ perform_dmr_analysis <- function(
     n_iterations = n_iterations,
     subsample_fraction = subsample_fraction,
     delta = delta, p.threshold = p.threshold,
-    fdr.threshold = fdr.threshold, smoothing = FALSE
+    fdr.threshold = fdr.threshold, smoothing = smoothing
   )
   saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
 
   print("Performing DMLtest")
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
   dml_dt <- as.data.table(dml_test)
 
   dml_dt[, `:=`(
@@ -220,9 +225,10 @@ print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
 ))
+smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
 output_dir <- file.path(base_dir, sprintf(
-  "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
+  "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
+  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge,smoothing_string
 ))
 
 print("running dss analysis")
@@ -233,6 +239,7 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir, output_dir,
   min.CpG = min.CpG,
   min.len = min.len,
   dis.merge = dis.merge,
+  smoothing = smoothing,
   cl = cl
 )
 
