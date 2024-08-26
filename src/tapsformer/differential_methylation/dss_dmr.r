@@ -69,7 +69,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 }
 
 create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, prefix, n) {
-  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 10, prefix = prefix)
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 100, prefix = prefix)
   create_volcano_plot(top_hypo_dmrs, diff_col = "diff.Methy", pval_col = "pval", output_dir, prefix = prefix)
   create_methylation_diff_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
   create_chromosome_coverage_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
@@ -180,7 +180,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
 
   # Visualizations
   print("Creating visualizations")
-  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss_", n = 100)
+  create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss", n = 100)
   print("DSS Analysis complete")
   return(dmr_dt)
 }
