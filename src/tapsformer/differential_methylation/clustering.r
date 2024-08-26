@@ -67,7 +67,7 @@ if (file.exists(subsampled_file)) {
 
     print("creating data set")
     type_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
-    print(type_prefix,"data loaded")
+    print("data loaded")
 
     # Step 2: Subsample CpG sites to reduce the size of the dataset
     set.seed(123)  # For reproducibility
