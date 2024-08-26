@@ -71,7 +71,7 @@ if (file.exists(subsampled_file)) {
 
     # Step 2: Subsample CpG sites to reduce the size of the dataset
     set.seed(123)  # For reproducibility
-    num_sites_to_keep <- 10000  # Define a smaller number of CpG sites to keep
+    num_sites_to_keep <- 100000  
 
     # Randomly select a subset of CpG sites
     total_sites <- nrow(type_bsseq)
