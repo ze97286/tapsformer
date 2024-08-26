@@ -133,13 +133,22 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   dmr_dt[, pval := apply(.SD, 1, get_min_pval)]
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
 
+  # Categorize DMR strength based on areaStat thresholds before filtering
+  thresholds <- analyze_areastat_thresholds(dmr_dt, "areaStat", output_dir)
+  dmr_dt[, hypomethylation_strength := case_when(
+    areaStat >= thresholds$very_strong ~ "Very Strong",
+    areaStat >= thresholds$strong ~ "Strong",
+    areaStat >= thresholds$moderate ~ "Moderate",
+    TRUE ~ "Weak"
+  )]
+
+  # Filter based on hypomethylation, significant FDR, and high areaStat
   dmr_dt[, `:=`(
     hypo_in_tumour = diff.Methy < 0,
     significant_after_fdr = fdr < fdr.threshold,
     high_areaStat = areaStat > quantile(areaStat, areaStat_percentile)
   )]
 
-  # Select top hypomethylated DMRs
   top_hypo_dmrs <- dmr_dt[hypo_in_tumour == TRUE &
     significant_after_fdr == TRUE &
     high_areaStat == TRUE]
@@ -152,15 +161,6 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
     print("No high-confidence hypomethylated DMRs found. Stopping analysis.")
     return(NULL)
   }
-
-  # Categorize DMR strength
-  thresholds <- analyze_areastat_thresholds(top_hypo_dmrs, "areaStat", output_dir)
-  top_hypo_dmrs[, hypomethylation_strength := case_when(
-    areaStat >= thresholds$very_strong ~ "Very Strong",
-    areaStat >= thresholds$strong ~ "Strong",
-    areaStat >= thresholds$moderate ~ "Moderate",
-    TRUE ~ "Weak"
-  )]
 
   # Save output
   fwrite(top_hypo_dmrs[, .(chr, start, end, areaStat, pval, fdr, hypomethylation_strength)],
