@@ -141,6 +141,10 @@ perform_dmr_analysis <- function(
   filtered_dmls <- sliding_window_filter(consistent_ci_diff_sig_hypo_dmls, window_size)
   print(sprintf("DMLs after sliding window filter: %d", nrow(top_hypo_dmls)))
 
+  strongest_dmls <- tail(filtered_dmls[order(filtered_dmls$stat), ], 500)
+  str(strongest_dmls)
+  plot_top_DMLs(strongest_dmls, combined_bsseq, output_dir)
+
   # Call DMRs using filtered DMLs
   print("Calling DMRs on filtered DMLs")
   dmrs <- callDMR(filtered_dmls, delta = delta, p.threshold = p.threshold, minlen = min.len, minCG = min.CpG, dis.merge = dis.merge)
