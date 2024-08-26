@@ -1,8 +1,30 @@
-start_time <- Sys.time()
+install_and_load <- function(pkg) {
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg)) {
+        install.packages(new.pkg, dependencies = TRUE)
+    }
+    sapply(pkg, require, character.only = TRUE)
+}
 
-source("dss_common.r")
+bioc_install_and_load <- function(pkg) {
+    if (!requireNamespace("BiocManager", quietly = TRUE)) {
+        install.packages("BiocManager")
+    }
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg)) {
+        BiocManager::install(new.pkg, update = FALSE)
+    }
+    sapply(pkg, require, character.only = TRUE)
+}
 
-base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", "full")
+options(repos = c(CRAN = "https://cloud.r-project.org"))
+bioc_packages <- c("ComplexHeatmap","bsseq")
+cran_packages <- c("cluster", "Rtsne","ggplot2")
+bioc_install_and_load(bioc_packages)
+install_and_load(cran_packages)
+sessionInfo()
+
+base_dir <- "/Users/zoharetzioni/Downloads/methylation_clustering"
 tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
 methylation_levels <- bsseq::getMeth(tumour_bsseq, type = "raw")
 
