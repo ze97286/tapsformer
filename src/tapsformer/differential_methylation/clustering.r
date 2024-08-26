@@ -32,6 +32,7 @@ subsampled_file <- file.path(base_dir,"tumour_subsampled_methylation_levels.rds"
 
 if (file.exists(subsampled_file)) {
     # Load the subsampled data
+    print("loading from subsampled file")
     methylation_levels_subset <- readRDS(subsampled_file)
     print("Loaded subsampled methylation data from file.")
 } else {
@@ -62,6 +63,7 @@ if (file.exists(subsampled_file)) {
         return(combined_bsseq)
     }
 
+    print("creating data set")
     tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
     print("tumour data loaded")
 
