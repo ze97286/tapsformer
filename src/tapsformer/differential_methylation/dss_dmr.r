@@ -1,14 +1,11 @@
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw
-# git pull;clear;Rscript src/tapsformer/differential_methylation/dss_differential_methylation.r 0.2 0.05 0.01 4 50 50 raw_with_liver
-
 start_time <- Sys.time()
 
 source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 8) {
-  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <smoothing> <suffix>")
+if (length(args) != 7) {
+  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <suffix>")
 }
 delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
@@ -16,11 +13,6 @@ fdr.threshold <- as.numeric(args[3])
 min.CpG <- as.numeric(args[4])
 min.len <- as.numeric(args[5])
 dis.merge <- as.numeric(args[6])
-smoothing_arg <- tolower(args[7]) # Convert to lowercase for consistency
-smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false") FALSE else NA
-if (is.na(smoothing)) {
-  stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
-}
 suffix <- args[8]
 
 # setup parallel processing
@@ -36,14 +28,8 @@ clusterEvalQ(cl, {
 
 # initialise dirs
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
-log_dir <- file.path("/users/zetzioni/sharedscratch/logs", sprintf("dss_%s_dmr_analysis_delta_%.2f_p_%.4f_fdr_%.2f.log", suffix, delta, p.threshold, fdr.threshold))
 
-# Set up logging
-flog.logger("dss_logger", appender.file(log_dir))
-flog.threshold(INFO)
-flog.threshold(WARN)
-flog.threshold(ERROR)
-print("Starting DSS DMR analysis")
+print("Starting dss dmr analysis")
 
 # data loading
 combined_bsseq <- load_and_combine_bsseq(base_dir, "tumour", "control")
@@ -68,6 +54,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
   print(sprintf("Completed plotting %d strongest hypomethylated DMRs", n))
 }
 
+# Generate plots from output
 create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, prefix, n) {
   plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 100, prefix = prefix)
   create_volcano_plot(top_hypo_dmrs, diff_col = "diff.Methy", pval_col = "pval", output_dir, prefix = prefix)
@@ -79,37 +66,46 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
   create_genomic_context_visualization(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
 }
 
-# this is the core function here, doing the DMR analysis + FDR correction, choosing hypomethylated DMRs and
-# saving the output and visualisations.
-perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl) {
+# Perform DMR analysis + FDR correction, choosing hypomethylated DMRs and saving the output and visualisations.
+perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl, areaStat_percentile = 0.75) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   print("Performing DMR analysis with DML pre-filtering")
   group1 <- grep("tumour_", sampleNames(combined_bsseq), value = TRUE)
   group2 <- grep("control_", sampleNames(combined_bsseq), value = TRUE)
 
-  # Perform DMLtest
-  print("Performing DMLtest")
-  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
+  if (length(group1) < 2 || length(group2) < 2) {
+    stop("Each group must have at least 2 samples. Found ", length(group1), " tumour samples and ", length(group2), " control samples.")
+  }
+  print(sprintf("Analysis will be performed on %d tumour samples and %d control samples", length(group1), length(group2)))
 
-  # Convert DMLtest results to data.table for filtering
+  print("Performing quality control checks")
+
+  # Check distribution of methylation values
+  meth_rates <- bsseq::getMeth(combined_bsseq, type = "raw")
+  meth_summary <- summary(as.vector(meth_rates))
+  print("Summary of methylation rates across all samples:")
+  print(meth_summary)
+
+  # Check coverage across samples
+  coverage <- bsseq::getCoverage(combined_bsseq)
+  cov_summary <- summary(as.vector(coverage))
+  print("Summary of coverage across all samples:")
+  print(cov_summary)
+
+  print("Performing DMLtest")
+  dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
   dml_dt <- as.data.table(dml_test)
 
-  # Apply filters similar to DML analysis
-  z_score <- qnorm(0.975) # Two-tailed 95% CI
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
-    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
-    mean_methylation_diff = abs(diff),
-    ci_excludes_zero = sign(diff - (z_score * diff.se)) == sign(diff + (z_score * diff.se))
+    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold
   )]
 
   # Filter DMLs
   filtered_dmls <- dml_dt[
     hypo_in_tumour == TRUE &
-      significant_after_fdr == TRUE &
-      mean_methylation_diff >= delta &
-      ci_excludes_zero == TRUE
+      significant_after_fdr == TRUE
   ]
 
   print(sprintf("Filtered DMLs: %d out of %d", nrow(filtered_dmls), nrow(dml_dt)))
@@ -137,11 +133,10 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   dmr_dt[, pval := apply(.SD, 1, get_min_pval)]
   dmr_dt[, fdr := p.adjust(pval, method = "BH")]
 
-  # Apply stringent filters to DMRs
   dmr_dt[, `:=`(
     hypo_in_tumour = diff.Methy < 0,
     significant_after_fdr = fdr < fdr.threshold,
-    high_areaStat = areaStat > quantile(areaStat, 0.75) # Top 25% by areaStat
+    high_areaStat = areaStat > quantile(areaStat, areaStat_percentile)
   )]
 
   # Select top hypomethylated DMRs
@@ -181,7 +176,7 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   # Visualizations
   print("Creating visualizations")
   create_visualisations(top_hypo_dmrs, combined_bsseq, output_dir, "dss", n = 100)
-  print("DSS Analysis complete")
+  print("DSS dmr analysis complete")
   return(dmr_dt)
 }
 
@@ -190,10 +185,9 @@ print(sprintf(
   "Starting analysis with delta = %.2f, p.threshold = %.4f, fdr.threshold = %.2f, min.CpG = %d, min.len = %d, dis.merge = %d",
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
 ))
-smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
 output_dir <- file.path(base_dir, sprintf(
-  "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
+  "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d",
+  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
 ))
 
 print("running dss analysis")
@@ -204,7 +198,6 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir, output_dir,
   min.CpG = min.CpG,
   min.len = min.len,
   dis.merge = dis.merge,
-  smoothing = smoothing,
   cl = cl
 )
 
