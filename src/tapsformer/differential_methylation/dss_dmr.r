@@ -114,6 +114,8 @@ perform_dmr_analysis <- function(
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
   dml_dt <- as.data.table(dml_test)
 
+  z_score <- qnorm(0.975)
+  
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
     significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
