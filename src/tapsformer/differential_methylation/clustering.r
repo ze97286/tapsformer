@@ -26,9 +26,10 @@ sessionInfo()
 
 args <- commandArgs(trailingOnly = TRUE)
 suffix <- args[1]
+type_prefix <- args[2]
 
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg",suffix)
-subsampled_file <- file.path(base_dir,"tumour_subsampled_methylation_levels.rds")
+subsampled_file <- file.path(base_dir,paste(type_prefix,"_subsampled_methylation_levels.rds"))
 
 if (file.exists(subsampled_file)) {
     # Load the subsampled data
@@ -64,7 +65,7 @@ if (file.exists(subsampled_file)) {
     }
 
     print("creating data set")
-    tumour_bsseq <- load_and_create_bsseq(base_dir, "tumour")
+    tumour_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
     print("tumour data loaded")
 
     # Step 2: Subsample CpG sites to reduce the size of the dataset
@@ -91,7 +92,7 @@ dist_matrix <- dist(t(methylation_levels_subset))  # Distance matrix for samples
 hclust_res <- hclust(dist_matrix, method = "ward.D2")  # Hierarchical clustering
 
 # Step 5: Save the heatmap to an SVG file
-heatmap_file <- file.path(base_dir,"tumour_samples_heatmap.svg")
+heatmap_file <- file.path(base_dir,paste(type_prefix,"_samples_heatmap.svg"))
 svg(heatmap_file, width = 8, height = 10)
 
 heatmap <- Heatmap(methylation_levels_subset,
@@ -108,7 +109,7 @@ print("heatmap saved")
 # Save PCA plot to SVG to visualize sample distribution in 2D
 pca_res <- prcomp(t(methylation_levels_subset), scale. = FALSE)
 pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels_subset))
-pca_file <- file.path(base_dir,"tumour_samples_pca.svg")
+pca_file <- file.path(base_dir,paste(type_prefix,"_samples_pca.svg"))
 svg(pca_file, width = 8, height = 8)
 ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
     geom_point(size = 3) +
@@ -119,10 +120,15 @@ dev.off()
 
 print("pca saved")
 
-# Save t-SNE plot to SVG to visualize non-linear relationships
-tsne_res <- Rtsne(t(methylation_levels_subset), dims = 2, perplexity = 30)
+num_samples <- ncol(methylation_levels_subset)
+
+# Set perplexity to a value less than the number of samples
+perplexity_value <- min(30, num_samples - 1)  # Ensure perplexity is not greater than the number of samples
+
+# Run t-SNE with adjusted perplexity
+tsne_res <- Rtsne(t(methylation_levels_subset), dims = 2, perplexity = perplexity_value)
 tsne_df <- data.frame(tsne_res$Y, Sample = colnames(methylation_levels_subset))
-tsne_file <- file.path(base_dir,"tumour_samples_tsne.svg")
+tsne_file <- file.path(base_dir, paste(type_prefix,"_samples_tsne.svg"))
 svg(tsne_file, width = 8, height = 8)
 ggplot(tsne_df, aes(X1, X2, label = Sample)) +
     geom_point(size = 3) +
