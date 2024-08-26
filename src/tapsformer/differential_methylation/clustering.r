@@ -139,3 +139,26 @@ ggplot(tsne_df, aes(X1, X2, label = Sample)) +
 dev.off()
 
 print("t-SNE saved")
+
+num_clusters <- 3  # Set the number of clusters you want to create
+set.seed(123)  # For reproducibility
+kmeans_res <- kmeans(pca_res$x[, 1:2], centers = num_clusters)  # Use the first two principal components for clustering
+
+# Add cluster assignments to PCA dataframe
+pca_df$Cluster <- as.factor(kmeans_res$cluster)
+
+# Save PCA plot with cluster information
+pca_clustered_file <- file.path(base_dir,paste(type_prefix,"_samples_pca_clusters.svg",sep=""))
+svg(pca_clustered_file, width = 8, height = 8)
+ggplot(pca_df, aes(PC1, PC2, color = Cluster, label = Sample)) +
+    geom_point(size = 3) +
+    geom_text_repel() +  # Use geom_text_repel to avoid overlap
+    theme_minimal() +
+    labs(title = sprintf("PCA of %s Samples with Clusters", type_prefix))
+dev.off()
+print("PCA with clusters saved")
+
+# Optional: Save the cluster assignments to a file
+cluster_assignments_file <- file.path(base_dir, paste(type_prefix, "_cluster_assignments.csv", sep = ""))
+write.csv(pca_df, cluster_assignments_file, row.names = FALSE)
+print("Cluster assignments saved")
