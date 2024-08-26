@@ -102,6 +102,7 @@ heatmap <- Heatmap(methylation_levels_subset,
 
 draw(heatmap)
 dev.off()
+print("heatmap saved")
 
 # Step 6: Optional - Dimensionality Reduction and Visualization
 # Save PCA plot to SVG to visualize sample distribution in 2D
@@ -116,6 +117,8 @@ ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
     labs(title = "PCA of Tumour Samples")
 dev.off()
 
+print("pca saved")
+
 # Save t-SNE plot to SVG to visualize non-linear relationships
 tsne_res <- Rtsne(t(methylation_levels_subset), dims = 2, perplexity = 30)
 tsne_df <- data.frame(tsne_res$Y, Sample = colnames(methylation_levels_subset))
@@ -127,3 +130,5 @@ ggplot(tsne_df, aes(X1, X2, label = Sample)) +
     theme_minimal() +
     labs(title = "t-SNE of Tumour Samples")
 dev.off()
+
+print("t-SNE saved")
