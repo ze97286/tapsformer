@@ -21,7 +21,7 @@ bioc_install_and_load <- function(pkg) {
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 bioc_packages <- c(
     "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db", "bumphunter", "dmrseq",
-    "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel", "Gviz","edgeR","limma", "DMRcate","SummarizedExperiment"
+    "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel", "Gviz", "edgeR", "limma", "DMRcate", "SummarizedExperiment"
 )
 cran_packages <- c("jpeg", "minfi", "Biobase", "data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
 bioc_install_and_load(bioc_packages)
@@ -521,4 +521,51 @@ plot_single_dmr <- function(filename, dmr, combined_bsseq, i, ext = 0) {
             print(sprintf("Error encountered while processing DMR %d: %s", i, conditionMessage(e)))
         }
     )
+}
+
+cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 5, subsample_fraction = 0.8,
+                                delta, p.threshold, fdr.threshold, smoothing) {
+    all_dmls <- list()
+
+    for (i in 1:n_iterations) {
+        # Subsample from each group separately
+        subsample1 <- sample(group1, length(group1) * subsample_fraction)
+        subsample2 <- sample(group2, length(group2) * subsample_fraction)
+        subsample <- c(subsample1, subsample2)
+
+        sub_bsseq <- bsseq_data[, subsample]
+
+        dml_test <- DMLtest(sub_bsseq, group1 = subsample1, group2 = subsample2, smoothing = smoothing)
+        dmls <- callDML(dml_test, delta = delta, p.threshold = p.threshold)
+
+        dml_dt <- as.data.table(dmls)
+        dml_dt[, significant_after_fdr := fdr < fdr.threshold]
+
+        all_dmls[[i]] <- dml_dt[significant_after_fdr == TRUE, .(chr, pos)]
+    }
+
+    # Keep DMLs that appear in at least half of the iterations
+    dml_counts <- table(unlist(lapply(all_dmls, function(x) paste(x$chr, x$pos))))
+    consistent_dmls <- names(dml_counts[dml_counts >= n_iterations / 2])
+
+    return(consistent_dmls)
+}
+
+sliding_window_filter <- function(dmls, window_size, min_cpgs = 3, consistency_threshold = 0.8) {
+  dmls[, window := cut(pos, breaks = seq(min(pos), max(pos) + window_size, by = window_size))]
+  windowed_dmls <- dmls[, .(
+    mean_diff = mean(diff),
+    mean_pval = mean(pval),
+    n_dmls = .N,
+    consistency = mean(sign(diff) == sign(mean(diff)))
+  ), by = .(chr, window)]
+
+  significant_windows <- windowed_dmls[
+    abs(mean_diff) >= delta &
+      mean_pval < p.threshold &
+      n_dmls >= min_cpgs &
+      consistency >= consistency_threshold
+  ]
+
+  dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
 }

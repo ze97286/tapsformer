@@ -67,7 +67,10 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 }
 
 # Perform DMR analysis + FDR correction, choosing hypomethylated DMRs and saving the output and visualisations.
-perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl, areaStat_percentile = 0.75) {
+perform_dmr_analysis <- function(
+    combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, cl, areaStat_percentile = 0.75,
+    n_iterations = 5,
+    subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   print("Performing DMR analysis with DML pre-filtering")
@@ -93,22 +96,50 @@ perform_dmr_analysis <- function(combined_bsseq, base_dir, output_dir, delta, p.
   print("Summary of coverage across all samples:")
   print(cov_summary)
 
+  # run cross validation dml
+  consistent_dmls <- cross_validate_dmls(combined_bsseq, group1, group2,
+    n_iterations = n_iterations,
+    subsample_fraction = subsample_fraction,
+    delta = delta, p.threshold = p.threshold,
+    fdr.threshold = fdr.threshold, smoothing = FALSE
+  )
+  saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
+
   print("Performing DMLtest")
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = TRUE)
   dml_dt <- as.data.table(dml_test)
 
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
-    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold
+    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
+    consistent = paste(chr, pos) %in% consistent_dmls,
+    mean_methylation_diff = abs(diff),
+    ci_excludes_zero = sign(diff - (z_score * diff.se)) == sign(diff + (z_score * diff.se))
   )]
 
   # Filter DMLs
-  filtered_dmls <- dml_dt[
-    hypo_in_tumour == TRUE &
-      significant_after_fdr == TRUE
-  ]
+  # Stage 1: Hypomethylation
+  hypo_dmls <- dml_dt[hypo_in_tumour == TRUE]
+  print(sprintf("DMLs after hypomethylation filter: %d", nrow(hypo_dmls)))
 
-  print(sprintf("Filtered DMLs: %d out of %d", nrow(filtered_dmls), nrow(dml_dt)))
+  # Stage 2: FDR significance
+  sig_hypo_dmls <- hypo_dmls[significant_after_fdr == TRUE]
+  print(sprintf("DMLs after FDR significance filter: %d", nrow(sig_hypo_dmls)))
+
+  diff_sig_hypo_dmls <- sig_hypo_dmls[mean_methylation_diff >= delta]
+  print(sprintf("DMLs after methylation difference filter: %d", nrow(diff_sig_hypo_dmls)))
+
+  # Stage 4: Confidence interval
+  ci_diff_sig_hypo_dmls <- diff_sig_hypo_dmls[ci_excludes_zero == TRUE]
+  print(sprintf("DMLs after confidence interval filter: %d", nrow(ci_diff_sig_hypo_dmls)))
+
+  # Stage 5: Consistency (from cross-validation)
+  consistent_ci_diff_sig_hypo_dmls <- ci_diff_sig_hypo_dmls[consistent == TRUE]
+  print(sprintf("DMLs after consistency filter: %d", nrow(consistent_ci_diff_sig_hypo_dmls)))
+
+  # Stage 6: Sliding window filter
+  filtered_dmls <- sliding_window_filter(consistent_ci_diff_sig_hypo_dmls, window_size)
+  print(sprintf("DMLs after sliding window filter: %d", nrow(top_hypo_dmls)))
 
   # Call DMRs using filtered DMLs
   print("Calling DMRs on filtered DMLs")
