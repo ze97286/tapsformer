@@ -70,7 +70,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                     skips_end=int(read.cigartuples[-1][1])
 
                 cpg_count = count_cpgs(reconstructed_ref, ref_following_base)
-                if cpg_count <=0:
+                if cpg_count <3:
                     continue
 
                 mstatus = methylation_status(reconstructed_read, reconstructed_ref, read.flag, ref_following_base)

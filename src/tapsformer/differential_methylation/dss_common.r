@@ -20,10 +20,10 @@ bioc_install_and_load <- function(pkg) {
 
 options(repos = c(CRAN = "https://cloud.r-project.org"))
 bioc_packages <- c(
-    "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db", "bumphunter", "dmrseq",
+    "DSS", "GenomicRanges", "bsseq", "org.Hs.eg.db", "bumphunter", "dmrseq","ComplexHeatmap",
     "TxDb.Hsapiens.UCSC.hg38.knownGene", "AnnotationHub", "BiocParallel", "Gviz", "edgeR", "limma", "DMRcate", "SummarizedExperiment"
 )
-cran_packages <- c("jpeg", "minfi", "Biobase", "data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
+cran_packages <- c("cluster", "Rtsne", "jpeg", "minfi", "Biobase", "data.table", "futile.logger", "parallel", "dplyr", "tidyr", "ggplot2", "svglite", "pheatmap", "grid", "gridExtra")
 bioc_install_and_load(bioc_packages)
 install_and_load(cran_packages)
 sessionInfo()
