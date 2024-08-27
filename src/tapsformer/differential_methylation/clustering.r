@@ -145,6 +145,8 @@ print("t-SNE saved")
 
 num_clusters <- clusters
 set.seed(123)
+pca_res <- prcomp(t(methylation_levels_subset), scale. = FALSE)
+pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels_subset))
 kmeans_res <- kmeans(pca_res$x[, 1:2], centers = num_clusters)
 pca_df$Cluster <- as.factor(kmeans_res$cluster)
 
