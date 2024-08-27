@@ -33,57 +33,68 @@ base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation
 subsampled_file <- file.path(base_dir, paste(type_prefix, "_subsampled_methylation_levels.rds", sep = ""))
 print(subsampled_file)
 
+load_and_create_bsseq <- function(base_dir, prefix) {
+    sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
+    if (length(sample_files) == 0) {
+        stop("Error: No RDS files found with the given prefix.")
+    }
+    bsseq_list <- lapply(sample_files, function(file_path) {
+        sample_data <- readRDS(file_path)
+        sample_name <- gsub("\\.rds$", "", basename(file_path))
+
+        # Removing or collapsing duplicate loci
+        unique_loci <- !duplicated(paste(sample_data$chr, sample_data$pos, sep = ":"))
+        sample_data <- sample_data[unique_loci, ]
+
+        BSseq(
+            chr = sample_data$chr,
+            pos = sample_data$pos,
+            M = as.matrix(sample_data$X),
+            Cov = as.matrix(sample_data$N),
+            sampleNames = sample_name
+        )
+    })
+
+    combined_bsseq <- do.call(combineList, bsseq_list)
+    return(combined_bsseq)
+}
+
+load_consistent_dmls <- function(dml_positions_file) {
+    consistent_dmls <- readRDS(dml_positions_file)
+    parsed_dmls <- data.frame(
+        chr = sapply(strsplit(consistent_dmls, " "), function(x) x[1]),
+        pos = as.numeric(sapply(strsplit(consistent_dmls, " "), function(x) x[2])),
+        stringsAsFactors = FALSE
+    )
+
+    return(parsed_dmls)
+}
+
 if (file.exists(subsampled_file)) {
     # Load the subsampled data
     print("loading from subsampled file")
     methylation_levels_subset <- readRDS(subsampled_file)
     print("Loaded subsampled methylation data from file.")
 } else {
-    # Load the consistent DML positions
     dml_positions_file <- file.path(base_dir, "consistent_dmls.rds")
-    consistent_dmls <- readRDS(dml_positions_file)
+    parsed_dmls <- load_consistent_dmls(dml_positions_file)
     print("Loaded consistent DML positions")
 
-    load_and_create_bsseq <- function(base_dir, prefix) {
-        sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
-        if (length(sample_files) == 0) {
-            stop("Error: No RDS files found with the given prefix.")
-        }
-        bsseq_list <- lapply(sample_files, function(file_path) {
-            sample_data <- readRDS(file_path)
-            sample_name <- gsub("\\.rds$", "", basename(file_path))
-
-            # Removing or collapsing duplicate loci
-            unique_loci <- !duplicated(paste(sample_data$chr, sample_data$pos, sep = ":"))
-            sample_data <- sample_data[unique_loci, ]
-
-            BSseq(
-                chr = sample_data$chr,
-                pos = sample_data$pos,
-                M = as.matrix(sample_data$X),
-                Cov = as.matrix(sample_data$N),
-                sampleNames = sample_name
-            )
-        })
-
-        combined_bsseq <- do.call(combineList, bsseq_list)
-        return(combined_bsseq)
-    }
-
+    # Create BSseq object
     print("creating data set")
     type_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
     print("data loaded")
 
-    # Step 2: Extract the CpG sites that match the consistent DML positions
-    dml_chr <- sapply(strsplit(consistent_dmls, " "), function(x) x[1])
-    dml_pos <- as.integer(sapply(strsplit(consistent_dmls, " "), function(x) x[2]))
+    # Match DMLs to BSseq object
+    matching_indices <- which(type_bsseq@chr %in% parsed_dmls$chr & type_bsseq@pos %in% parsed_dmls$pos)
 
-    # Filter the BSseq object based on the consistent DML positions
-    valid_indices <- which(type_bsseq@pos %in% dml_pos & type_bsseq@chr %in% dml_chr)
-    methylation_levels_subset <- getMeth(type_bsseq[valid_indices, ], type = "raw")
+    # Subset the BSseq object to include only the matched DMLs
+    methylation_levels_subset <- getMeth(type_bsseq[matching_indices, ], type = "raw")
 
+    # Handle missing values
     methylation_levels_subset <- na.omit(methylation_levels_subset)
 
+    # Save the filtered methylation data
     saveRDS(methylation_levels_subset, subsampled_file)
     print("Subsampled methylation data saved to file.")
 }
