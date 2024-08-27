@@ -41,13 +41,10 @@ load_and_create_bsseq <- function(base_dir, prefix) {
 
     bsseq_list <- lapply(sample_files, function(file_path) {
         sample_data <- readRDS(file_path)
-
-        # Check if sample_data is a list and contains the expected elements
         if (is.list(sample_data)) {
             if (all(c("chr", "pos", "X", "N") %in% names(sample_data))) {
                 sample_name <- gsub("\\.rds$", "", basename(file_path))
                 print(sample_name)
-                # Remove or collapse duplicate loci
                 unique_loci <- !duplicated(paste(sample_data$chr, sample_data$pos, sep = ":"))
                 sample_data <- sample_data[unique_loci, ]
 
@@ -82,7 +79,6 @@ load_consistent_dmls <- function(dml_positions_file) {
 }
 
 if (file.exists(subsampled_file)) {
-    # Load the subsampled data
     print("loading from subsampled file")
     methylation_levels_subset <- readRDS(subsampled_file)
     print("Loaded subsampled methylation data from file.")
@@ -91,29 +87,18 @@ if (file.exists(subsampled_file)) {
     parsed_dmls <- load_consistent_dmls(dml_positions_file)
     print("Loaded consistent DML positions")
 
-    # Create BSseq object
     print("creating data set")
     type_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
     print("data loaded")
 
-    # Extract chromosome and position information from the BSseq object
     bsseq_chr <- as.character(seqnames(type_bsseq))
     bsseq_pos <- start(type_bsseq)
-
-    # Match DMLs to BSseq object
     matching_indices <- which(bsseq_chr %in% parsed_dmls$chr & bsseq_pos %in% parsed_dmls$pos)
-
-    # Subset the BSseq object to include only the matched DMLs
     methylation_levels_subset <- getMeth(type_bsseq[matching_indices, ], type = "raw")
-
-    # Handle missing values
     methylation_levels_subset <- na.omit(methylation_levels_subset)
-
-    # Save the filtered methylation data
     saveRDS(methylation_levels_subset, subsampled_file)
     print("Subsampled methylation data saved to file.")
 }
-
 
 max_sites_to_plot <- 10000
 
@@ -142,26 +127,9 @@ draw(heatmap)
 dev.off()
 print("Heatmap saved")
 
-
-# Step 6: PCA plot with ggrepel to avoid label overlap
-pca_res <- prcomp(t(methylation_levels_subset), scale. = FALSE)
-pca_df <- data.frame(pca_res$x, Sample = colnames(methylation_levels_subset))
-pca_file <- file.path(base_dir, paste(type_prefix, "_samples_pca.svg", sep = ""))
-svg(pca_file, width = 8, height = 8)
-ggplot(pca_df, aes(PC1, PC2, label = Sample)) +
-    geom_point(size = 3) +
-    geom_text_repel() + # Use geom_text_repel to avoid overlap
-    theme_minimal() +
-    labs(title = sprintf("PCA of %s Samples", type_prefix))
-dev.off()
-print("pca saved")
-
-# Step 7: t-SNE with adjusted perplexity and ggrepel to avoid label overlap
 num_samples <- ncol(methylation_levels_subset)
+perplexity_value <- min(10, floor((num_samples - 1) / 3)) 
 
-perplexity_value <- min(10, floor((num_samples - 1) / 3)) # A safer approach, ensuring perplexity is much smaller than the number of samples
-
-# Run t-SNE with the adjusted perplexity
 tsne_res <- Rtsne(t(methylation_levels_subset), dims = 2, perplexity = perplexity_value)
 tsne_df <- data.frame(tsne_res$Y, Sample = colnames(methylation_levels_subset))
 tsne_file <- file.path(base_dir, paste(type_prefix, "_samples_tsne.svg", sep = ""))
