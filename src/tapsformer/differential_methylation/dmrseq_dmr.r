@@ -125,8 +125,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
     areaStat = stat * width, # Using stat * width as a proxy for area
     pval = pval,
     fdr = qval,
-    length = width,
-    numCG = numCpGs
+    length = width
   )]
 
   # Add hypomethylation flag (all should be TRUE at this point)
