@@ -96,8 +96,12 @@ if (file.exists(subsampled_file)) {
     type_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
     print("data loaded")
 
+    # Extract chromosome and position information from the BSseq object
+    bsseq_chr <- as.character(seqnames(type_bsseq))
+    bsseq_pos <- start(type_bsseq)
+
     # Match DMLs to BSseq object
-    matching_indices <- which(type_bsseq@chr %in% parsed_dmls$chr & type_bsseq@pos %in% parsed_dmls$pos)
+    matching_indices <- which(bsseq_chr %in% parsed_dmls$chr & bsseq_pos %in% parsed_dmls$pos)
 
     # Subset the BSseq object to include only the matched DMLs
     methylation_levels_subset <- getMeth(type_bsseq[matching_indices, ], type = "raw")
@@ -109,6 +113,7 @@ if (file.exists(subsampled_file)) {
     saveRDS(methylation_levels_subset, subsampled_file)
     print("Subsampled methylation data saved to file.")
 }
+
 
 max_sites_to_plot <- 10000
 
