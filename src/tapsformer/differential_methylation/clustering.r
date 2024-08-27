@@ -38,21 +38,32 @@ load_and_create_bsseq <- function(base_dir, prefix) {
     if (length(sample_files) == 0) {
         stop("Error: No RDS files found with the given prefix.")
     }
+
     bsseq_list <- lapply(sample_files, function(file_path) {
         sample_data <- readRDS(file_path)
-        sample_name <- gsub("\\.rds$", "", basename(file_path))
 
-        # Removing or collapsing duplicate loci
-        unique_loci <- !duplicated(paste(sample_data$chr, sample_data$pos, sep = ":"))
-        sample_data <- sample_data[unique_loci, ]
+        # Check if sample_data is a list and contains the expected elements
+        if (is.list(sample_data)) {
+            if (all(c("chr", "pos", "X", "N") %in% names(sample_data))) {
+                sample_name <- gsub("\\.rds$", "", basename(file_path))
+                print(sample_name)
+                # Remove or collapse duplicate loci
+                unique_loci <- !duplicated(paste(sample_data$chr, sample_data$pos, sep = ":"))
+                sample_data <- sample_data[unique_loci, ]
 
-        BSseq(
-            chr = sample_data$chr,
-            pos = sample_data$pos,
-            M = as.matrix(sample_data$X),
-            Cov = as.matrix(sample_data$N),
-            sampleNames = sample_name
-        )
+                return(BSseq(
+                    chr = sample_data$chr,
+                    pos = sample_data$pos,
+                    M = as.matrix(sample_data$X),
+                    Cov = as.matrix(sample_data$N),
+                    sampleNames = sample_name
+                ))
+            } else {
+                stop("Error: The loaded sample_data does not contain the required fields ('chr', 'pos', 'X', 'N').")
+            }
+        } else {
+            stop("Error: sample_data is not a list. Check the contents of the RDS files.")
+        }
     })
 
     combined_bsseq <- do.call(combineList, bsseq_list)
