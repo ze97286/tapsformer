@@ -58,7 +58,7 @@ safe_plot <- function(filename, plot_func, width = 10, height = 8) {
 }
 
 # Load tumour/control samples data
-load_and_create_bsseq <- function(base_dir, prefix) {
+load_and_create_bsseq <- function(base_dir, prefix, min_coverage = 10) {
     sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
     if (length(sample_files) == 0) {
         stop("Error: No RDS files found with the given prefix.")
@@ -66,15 +66,16 @@ load_and_create_bsseq <- function(base_dir, prefix) {
     bsseq_list <- lapply(sample_files, function(file_path) {
         sample_data <- readRDS(file_path)
         sample_name <- gsub("\\.rds$", "", basename(file_path))
+        valid_indices <- sample_data$N >= min_coverage
         BSseq(
-            chr = sample_data$chr,
-            pos = sample_data$pos,
-            M = as.matrix(sample_data$X),
-            Cov = as.matrix(sample_data$N),
+            chr = sample_data$chr[valid_indices],
+            pos = sample_data$pos[valid_indices],
+            M = as.matrix(sample_data$X[valid_indices]),
+            Cov = as.matrix(sample_data$N[valid_indices]),
             sampleNames = sample_name
         )
     })
-
+    
     combined_bsseq <- do.call(combineList, bsseq_list)
     return(combined_bsseq)
 }
