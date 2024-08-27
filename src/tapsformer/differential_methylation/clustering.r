@@ -30,7 +30,7 @@ type_prefix <- args[2]
 clusters <- as.numeric(args[3])
 
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
-subsampled_file <- file.path(base_dir, paste(type_prefix, "_subsampled_methylation_levels.rds", sep = ""))
+subsampled_file <- file.path(base_dir, paste("clustering_",type_prefix, "_subsampled_methylation_levels.rds", sep = ""))
 print(subsampled_file)
 
 load_and_create_bsseq <- function(base_dir, prefix) {
