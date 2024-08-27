@@ -152,7 +152,7 @@ dev.off()
 
 print("t-SNE saved")
 
-num_clusters <- 3 # Set the number of clusters you want to create
+num_clusters <- 2 # Set the number of clusters you want to create
 set.seed(123) # For reproducibility
 kmeans_res <- kmeans(pca_res$x[, 1:2], centers = num_clusters) # Use the first two principal components for clustering
 
