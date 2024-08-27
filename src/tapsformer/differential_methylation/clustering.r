@@ -27,6 +27,7 @@ sessionInfo()
 args <- commandArgs(trailingOnly = TRUE)
 suffix <- args[1]
 type_prefix <- args[2]
+clusters <- as.numeric(args[3])
 
 base_dir <- file.path("/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg", suffix)
 subsampled_file <- file.path(base_dir, paste(type_prefix, "_subsampled_methylation_levels.rds", sep = ""))
@@ -38,7 +39,11 @@ if (file.exists(subsampled_file)) {
     methylation_levels_subset <- readRDS(subsampled_file)
     print("Loaded subsampled methylation data from file.")
 } else {
-    # Step 1: Modify the function to detect and handle duplicate loci before creating BSseq object
+    # Load the consistent DML positions
+    dml_positions_file <- file.path(base_dir, "consistent_dmls.rds")
+    consistent_dmls <- readRDS(dml_positions_file)
+    print("Loaded consistent DML positions")
+
     load_and_create_bsseq <- function(base_dir, prefix) {
         sample_files <- list.files(path = base_dir, pattern = paste0("^", prefix, "_.*\\.rds$"), full.names = TRUE)
         if (length(sample_files) == 0) {
@@ -69,26 +74,21 @@ if (file.exists(subsampled_file)) {
     type_bsseq <- load_and_create_bsseq(base_dir, type_prefix)
     print("data loaded")
 
-    # Step 2: Subsample CpG sites to reduce the size of the dataset
-    set.seed(123) # For reproducibility
-    num_sites_to_keep <- 50000
+    # Step 2: Extract the CpG sites that match the consistent DML positions
+    dml_chr <- sapply(strsplit(consistent_dmls, " "), function(x) x[1])
+    dml_pos <- as.integer(sapply(strsplit(consistent_dmls, " "), function(x) x[2]))
 
-    # Randomly select a subset of CpG sites
-    total_sites <- nrow(type_bsseq)
-    subset_indices <- sample(1:total_sites, min(num_sites_to_keep, total_sites))
+    # Filter the BSseq object based on the consistent DML positions
+    valid_indices <- which(type_bsseq@pos %in% dml_pos & type_bsseq@chr %in% dml_chr)
+    methylation_levels_subset <- getMeth(type_bsseq[valid_indices, ], type = "raw")
 
-    methylation_levels <- getMeth(type_bsseq, type = "raw")
-    methylation_levels_subset <- methylation_levels[subset_indices, ]
-
-    # Step 3: Filter out rows with NA or NaN values
     methylation_levels_subset <- na.omit(methylation_levels_subset)
 
-    # Save the subsampled data to disk
     saveRDS(methylation_levels_subset, subsampled_file)
     print("Subsampled methylation data saved to file.")
 }
 
-max_sites_to_plot <- 10000 # Maximum number of sites to include in the heatmap
+max_sites_to_plot <- 10000
 
 if (nrow(methylation_levels_subset) > max_sites_to_plot) {
     subset_indices <- sample(1:nrow(methylation_levels_subset), max_sites_to_plot)
@@ -97,17 +97,15 @@ if (nrow(methylation_levels_subset) > max_sites_to_plot) {
     methylation_levels_for_heatmap <- methylation_levels_subset
 }
 
-# Step 4: Proceed with clustering and visualization on the subset
-dist_matrix <- dist(t(methylation_levels_for_heatmap)) # Distance matrix for samples
-hclust_res <- hclust(dist_matrix, method = "ward.D2") # Hierarchical clustering
+dist_matrix <- dist(t(methylation_levels_for_heatmap))
+hclust_res <- hclust(dist_matrix, method = "ward.D2")
 
 
-# Option 2: Create the heatmap without row clustering if the dataset is still large
-heatmap_file <- file.path(base_dir,paste(type_prefix,"_samples_heatmap.svg",sep=""))
+heatmap_file <- file.path(base_dir, paste(type_prefix, "_samples_heatmap.svg", sep = ""))
 svg(heatmap_file, width = 8, height = 10)
 heatmap <- Heatmap(methylation_levels_for_heatmap,
-    cluster_rows = FALSE, # Disable clustering on rows to avoid the error
-    cluster_columns = hclust_res, # Clustering only on columns (samples)
+    cluster_rows = FALSE,
+    cluster_columns = hclust_res,
     show_row_dend = FALSE,
     show_column_names = TRUE,
     column_title = sprintf("Heatmap of %s Samples", type_prefix)
@@ -132,10 +130,8 @@ dev.off()
 print("pca saved")
 
 # Step 7: t-SNE with adjusted perplexity and ggrepel to avoid label overlap
-# Get the number of samples
 num_samples <- ncol(methylation_levels_subset)
 
-# Set a very conservative perplexity value based on the number of samples
 perplexity_value <- min(10, floor((num_samples - 1) / 3)) # A safer approach, ensuring perplexity is much smaller than the number of samples
 
 # Run t-SNE with the adjusted perplexity
@@ -152,25 +148,21 @@ dev.off()
 
 print("t-SNE saved")
 
-num_clusters <- 2 # Set the number of clusters you want to create
-set.seed(123) # For reproducibility
-kmeans_res <- kmeans(pca_res$x[, 1:2], centers = num_clusters) # Use the first two principal components for clustering
-
-# Add cluster assignments to PCA dataframe
+num_clusters <- clusters
+set.seed(123)
+kmeans_res <- kmeans(pca_res$x[, 1:2], centers = num_clusters)
 pca_df$Cluster <- as.factor(kmeans_res$cluster)
 
-# Save PCA plot with cluster information
 pca_clustered_file <- file.path(base_dir, paste(type_prefix, "_samples_pca_clusters.svg", sep = ""))
 svg(pca_clustered_file, width = 8, height = 8)
 ggplot(pca_df, aes(PC1, PC2, color = Cluster, label = Sample)) +
     geom_point(size = 3) +
-    geom_text_repel() + # Use geom_text_repel to avoid overlap
+    geom_text_repel() +
     theme_minimal() +
     labs(title = sprintf("PCA of %s Samples with Clusters", type_prefix))
 dev.off()
 print("PCA with clusters saved")
 
-# Optional: Save the cluster assignments to a file
 cluster_assignments_file <- file.path(base_dir, paste(type_prefix, "_cluster_assignments.csv", sep = ""))
 write.csv(pca_df, cluster_assignments_file, row.names = FALSE)
 print("Cluster assignments saved")
