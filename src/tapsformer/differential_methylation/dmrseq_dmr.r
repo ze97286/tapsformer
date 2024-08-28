@@ -70,7 +70,7 @@ plot_top_DMRs <- function(top_hypo_dmrs, combined_bsseq, output_dir, n = 20, ext
 }
 
 create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, prefix, n) {
-  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = 10, prefix = prefix)
+  plot_top_DMRs(top_hypo_dmrs, combined_bsseq, output_dir, n = n, prefix = prefix)
   create_volcano_plot(top_hypo_dmrs, diff_col = "diff.Methy", pval_col = "pval", output_dir, prefix = prefix)
   create_methylation_diff_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
   create_chromosome_coverage_plot(top_hypo_dmrs, diff_col = "diff.Methy", output_dir, prefix = prefix)
@@ -142,7 +142,7 @@ perform_dmrseq_analysis <- function(combined_bsseq, output_dir,
 
   print(sprintf("DMRSeq analysis identified %d significant hypomethylated DMRs", nrow(dmr_dt)))
   print("dmrseq visualisation")
-  create_visualisations(dmr_dt, combined_bsseq, output_dir, "dmrseq", n = 10)
+  create_visualisations(dmr_dt, combined_bsseq, output_dir, "dmrseq", n = 100)
   print("finished dmrseq")
 }
 
