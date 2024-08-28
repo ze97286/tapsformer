@@ -133,11 +133,14 @@ perform_dmr_analysis <- function(
 
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
-    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
-    consistent = paste(chr, pos) %in% consistent_dmls,
+    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,   
     mean_methylation_diff = abs(diff),
     ci_excludes_zero = sign(diff - (z_score * diff.se)) == sign(diff + (z_score * diff.se))
   )]
+
+  if (cross_validation) {
+     dml_dt[, `:=`(consistent = paste(chr, pos) %in% consistent_dmls)]
+  }
 
   # Filter DMLs
   # Stage 1: Hypomethylation
