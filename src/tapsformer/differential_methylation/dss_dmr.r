@@ -4,8 +4,8 @@ source("dss_common.r")
 
 # initialise command line args
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 8) {
-  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <smoothing> <suffix>")
+if (length(args) != 10) {
+  stop("Usage: Rscript dss_dmr.r <delta> <p.threshold> <fdr.threshold> <min.CpG> <min.len> <dis.merge> <smoothing> <sliding window> <cross validation> <suffix>")
 }
 delta <- as.numeric(args[1])
 p.threshold <- as.numeric(args[2])
@@ -18,7 +18,17 @@ smoothing <- if (smoothing_arg == "true") TRUE else if (smoothing_arg == "false"
 if (is.na(smoothing)) {
   stop("Invalid smoothing argument. Please use 'TRUE' or 'FALSE'.")
 }
-suffix <- args[8]
+sliding_window_arg <- tolower(args[8])
+sliding_window <- if (sliding_window_arg == "true") TRUE else if (sliding_window_arg == "false") FALSE else NA
+if (is.na(sliding_window_arg)) {
+  stop("Invalid sliding_window_arg argument. Please use 'TRUE' or 'FALSE'.")
+}
+cv_arg <- tolower(args[9])
+cross_validation <- if (cv_arg == "true") TRUE else if (cv_arg == "false") FALSE else NA
+if (is.na(cv_arg)) {
+  stop("Invalid sliding_window_arg argument. Please use 'TRUE' or 'FALSE'.")
+}
+suffix <- args[10]
 
 # setup parallel processing
 library(parallel)
@@ -73,7 +83,10 @@ create_visualisations <- function(top_hypo_dmrs, combined_bsseq, output_dir, pre
 
 # Perform DMR analysis + FDR correction, choosing hypomethylated DMRs and saving the output and visualisations.
 perform_dmr_analysis <- function(
-    combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl, areaStat_percentile = 0.75,
+    combined_bsseq, base_dir, output_dir, delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing, cl,
+    cross_validation,
+    sliding_window,
+    areaStat_percentile = 0.75,
     n_iterations = 5,
     subsample_fraction = 0.8, min_span = 200, max_span = 1000, min_cpgs = 20, window_size = 500) {
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
@@ -102,13 +115,15 @@ perform_dmr_analysis <- function(
   print(cov_summary)
 
   # run cross validation dml
-  consistent_dmls <- cross_validate_dmls(combined_bsseq, group1, group2,
-    n_iterations = n_iterations,
-    subsample_fraction = subsample_fraction,
-    delta = delta, p.threshold = p.threshold,
-    fdr.threshold = fdr.threshold, smoothing = smoothing
-  )
-  saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
+  if (cross_validation) {
+    consistent_dmls <- cross_validate_dmls(combined_bsseq, group1, group2,
+      n_iterations = n_iterations,
+      subsample_fraction = subsample_fraction,
+      delta = delta, p.threshold = p.threshold,
+      fdr.threshold = fdr.threshold, smoothing = smoothing
+    )
+    saveRDS(consistent_dmls, file.path(output_dir, "consistent_dmls.rds"))
+  }
 
   print("Performing DMLtest")
   dml_test <- DMLtest(combined_bsseq, group1 = group1, group2 = group2, smoothing = smoothing)
@@ -133,6 +148,7 @@ perform_dmr_analysis <- function(
   sig_hypo_dmls <- hypo_dmls[significant_after_fdr == TRUE]
   print(sprintf("DMLs after FDR significance filter: %d", nrow(sig_hypo_dmls)))
 
+  # Stage 3: delta filtering
   diff_sig_hypo_dmls <- sig_hypo_dmls[mean_methylation_diff >= delta]
   print(sprintf("DMLs after methylation difference filter: %d", nrow(diff_sig_hypo_dmls)))
 
@@ -141,11 +157,11 @@ perform_dmr_analysis <- function(
   print(sprintf("DMLs after confidence interval filter: %d", nrow(ci_diff_sig_hypo_dmls)))
 
   # Stage 5: Consistency (from cross-validation)
-  consistent_ci_diff_sig_hypo_dmls <- ci_diff_sig_hypo_dmls[consistent == TRUE]
+  consistent_ci_diff_sig_hypo_dmls <- if (cross_validation) ci_diff_sig_hypo_dmls[consistent == TRUE] else ci_diff_sig_hypo_dmls
   print(sprintf("DMLs after consistency filter: %d", nrow(consistent_ci_diff_sig_hypo_dmls)))
 
   # Stage 6: Sliding window filter
-  filtered_dmls <- sliding_window_filter(consistent_ci_diff_sig_hypo_dmls, window_size)
+  filtered_dmls <- if (sliding_window) sliding_window_filter(consistent_ci_diff_sig_hypo_dmls, window_size) else consistent_ci_diff_sig_hypo_dmls
   print(sprintf("DMLs after sliding window filter: %d", nrow(filtered_dmls)))
 
   strongest_dmls <- tail(filtered_dmls[order(filtered_dmls$stat), ], 500)
@@ -228,9 +244,12 @@ print(sprintf(
   delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge
 ))
 smoothing_string <- ifelse(smoothing, "smooth", "unsmooth")
+cv_string <- ifelse(cross_validation, "cv", "no_cv")
+sliding_window_string <- ifelse(sliding_window, "window", "no_window")
+
 output_dir <- file.path(base_dir, sprintf(
-  "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s",
-  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string
+  "dmr_delta_%.2f_p_%.4f_fdr_%.2f_minCpG_%d_minLen_%d_disMerge_%d_%s_%s_%s",
+  delta, p.threshold, fdr.threshold, min.CpG, min.len, dis.merge, smoothing_string, cv_string, sliding_window_string
 ))
 
 print("running dss analysis")
@@ -242,6 +261,8 @@ result <- perform_dmr_analysis(combined_bsseq, base_dir, output_dir,
   min.len = min.len,
   dis.merge = dis.merge,
   smoothing = smoothing,
+  sliding_window = sliding_window,
+  cross_validation = cross_validation,
   cl = cl
 )
 
