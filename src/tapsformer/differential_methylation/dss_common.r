@@ -75,7 +75,7 @@ load_and_create_bsseq <- function(base_dir, prefix, min_coverage = 10) {
             sampleNames = sample_name
         )
     })
-    
+
     combined_bsseq <- do.call(combineList, bsseq_list)
     return(combined_bsseq)
 }
@@ -553,110 +553,249 @@ cross_validate_dmls <- function(bsseq_data, group1, group2, n_iterations = 5, su
 }
 
 sliding_window_filter <- function(dmls, window_size, min_cpgs = 3, consistency_threshold = 0.8) {
-  dmls[, window := cut(pos, breaks = seq(min(pos), max(pos) + window_size, by = window_size))]
-  windowed_dmls <- dmls[, .(
-    mean_diff = mean(diff),
-    mean_pval = mean(pval),
-    n_dmls = .N,
-    consistency = mean(sign(diff) == sign(mean(diff)))
-  ), by = .(chr, window)]
+    dmls[, window := cut(pos, breaks = seq(min(pos), max(pos) + window_size, by = window_size))]
+    windowed_dmls <- dmls[, .(
+        mean_diff = mean(diff),
+        mean_pval = mean(pval),
+        n_dmls = .N,
+        consistency = mean(sign(diff) == sign(mean(diff)))
+    ), by = .(chr, window)]
 
-  significant_windows <- windowed_dmls[
-    abs(mean_diff) >= delta &
-      mean_pval < p.threshold &
-      n_dmls >= min_cpgs &
-      consistency >= consistency_threshold
-  ]
+    significant_windows <- windowed_dmls[
+        abs(mean_diff) >= delta &
+            mean_pval < p.threshold &
+            n_dmls >= min_cpgs &
+            consistency >= consistency_threshold
+    ]
 
-  dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
+    dmls[chr %in% significant_windows$chr & window %in% significant_windows$window]
 }
 
 # generate a plot of top DMLs and their methylation levels in each sample
 plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
-  # Get the raw methylation data
-  methylation_data <- bsseq::getMeth(combined_bsseq, type = "raw")
-  sample_names <- colnames(methylation_data)
-  plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
+    # Get the raw methylation data
+    methylation_data <- bsseq::getMeth(combined_bsseq, type = "raw")
+    sample_names <- colnames(methylation_data)
+    plot_data <- data.table(chr = top_hypo_dmls$chr, pos = top_hypo_dmls$pos)
 
-  for (i in 1:nrow(top_hypo_dmls)) {
-    dml <- top_hypo_dmls[i, ]
+    for (i in 1:nrow(top_hypo_dmls)) {
+        dml <- top_hypo_dmls[i, ]
 
-    # Find the corresponding methylation levels
-    matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
+        # Find the corresponding methylation levels
+        matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
 
-    # Extract the methylation levels for this DML
-    meth_levels <- methylation_data[matching_indices, , drop = FALSE]
+        # Extract the methylation levels for this DML
+        meth_levels <- methylation_data[matching_indices, , drop = FALSE]
 
-    # Check if meth_levels has valid data
-    if (is.null(meth_levels) || nrow(meth_levels) == 0 || ncol(meth_levels) == 0) {
-      print(sprintf("No valid methylation data found for DML at %s:%d", dml$chr, dml$pos))
-      next # Skip to the next DML if no valid data is found
+        # Check if meth_levels has valid data
+        if (is.null(meth_levels) || nrow(meth_levels) == 0 || ncol(meth_levels) == 0) {
+            print(sprintf("No valid methylation data found for DML at %s:%d", dml$chr, dml$pos))
+            next # Skip to the next DML if no valid data is found
+        }
+
+        # Add methylation levels to plot_data with sample names as columns
+        plot_data[i, (sample_names) := as.list(meth_levels)]
     }
 
-    # Add methylation levels to plot_data with sample names as columns
-    plot_data[i, (sample_names) := as.list(meth_levels)]
-  }
+    # Melt the data for plotting
+    plot_data <- melt(plot_data,
+        id.vars = c("chr", "pos"),
+        variable.name = "Sample", value.name = "MethylationLevel"
+    )
 
-  # Melt the data for plotting
-  plot_data <- melt(plot_data,
-    id.vars = c("chr", "pos"),
-    variable.name = "Sample", value.name = "MethylationLevel"
-  )
+    # Add a new column to identify tumour and control samples
+    plot_data[, SampleType := ifelse(grepl("^tumour", Sample), "Tumour", "Control")]
 
-  # Add a new column to identify tumour and control samples
-  plot_data[, SampleType := ifelse(grepl("^tumour", Sample), "Tumour", "Control")]
+    # Check if plot_data is empty
+    if (nrow(plot_data) == 0) {
+        print("Plot data is empty after processing. No plot will be generated.")
+        return(NULL)
+    }
 
-  # Check if plot_data is empty
-  if (nrow(plot_data) == 0) {
-    print("Plot data is empty after processing. No plot will be generated.")
-    return(NULL)
-  }
+    # Generate and save the plot directly
+    output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
 
-  # Generate and save the plot directly
-  output_filename <- file.path(output_dir, "dml_methylation_plot.svg")
+    tryCatch(
+        {
+            # Calculate optimal number of columns based on the number of loci
+            num_loci <- nrow(top_hypo_dmls)
+            num_samples <- length(sample_names)
+            ncol <- min(5, num_loci)
 
-  tryCatch(
-    {
-      # Calculate optimal number of columns based on the number of loci
-      num_loci <- nrow(top_hypo_dmls)
-      num_samples <- length(sample_names)
-      ncol <- min(5, num_loci) 
+            # Calculate the number of rows required
+            nrow <- ceiling(num_loci / ncol)
 
-      # Calculate the number of rows required
-      nrow <- ceiling(num_loci / ncol)
+            # Adjust plot dimensions based on the number of rows and columns
+            plot_width <- max(18, ncol * 2) # Increase width to scale with more columns
+            plot_height <- max(10, nrow * 1.5) # Increase height to scale with more rows
 
-      # Adjust plot dimensions based on the number of rows and columns
-      plot_width <- max(18, ncol * 2) # Increase width to scale with more columns
-      plot_height <- max(10, nrow * 1.5) # Increase height to scale with more rows
+            # Generate the plot
+            svglite::svglite(output_filename, width = plot_width, height = plot_height)
 
-      # Generate the plot
-      svglite::svglite(output_filename, width = plot_width, height = plot_height)
+            plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
+                geom_point(size = 2) +
+                facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) + # Use the updated ncol
+                theme_bw() +
+                labs(
+                    title = "Methylation Levels Across Samples for Each DML",
+                    x = "Sample", y = "Methylation Level"
+                ) +
+                scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
+                scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
+                theme(
+                    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), # Adjust size for better readability
+                    strip.text = element_text(size = 12), # Adjust if needed
+                    plot.margin = unit(c(1, 1, 1, 1), "cm"),
+                    panel.spacing = unit(1.5, "lines") # Increase spacing between panels
+                )
 
-      plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
-        geom_point(size = 2) +
-        facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) + # Use the updated ncol
-        theme_bw() +
-        labs(
-          title = "Methylation Levels Across Samples for Each DML",
-          x = "Sample", y = "Methylation Level"
-        ) +
-        scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
-        scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
-        theme(
-          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10), # Adjust size for better readability
-          strip.text = element_text(size = 12), # Adjust if needed
-          plot.margin = unit(c(1, 1, 1, 1), "cm"),
-          panel.spacing = unit(1.5, "lines") # Increase spacing between panels
+            print(plot)
+            dev.off()
+        },
+        error = function(e) {
+            # Handle any errors that occur during plotting
+            print(sprintf("Error generating plot: %s", conditionMessage(e)))
+            dev.off() # Ensure device is closed even if there's an error
+        }
+    )
+    return(output_filename)
+}
+
+plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 20) {
+    # Get unique DMRs and sort by areaStat to get top N
+    top_dmrs <- unique(filtered_dmls_in_dmrs[order(-dmr_areaStat)][1:top_n_dmrs, .(dmr_id, dmr_areaStat)])
+
+    # Get the raw methylation data
+    methylation_data <- bsseq::getMeth(combined_bsseq, type = "raw")
+    sample_names <- colnames(methylation_data)
+
+    for (i in 1:nrow(top_dmrs)) {
+        current_dmr <- top_dmrs[i]
+        dmr_dmls <- filtered_dmls_in_dmrs[dmr_id == current_dmr$dmr_id]
+
+        plot_data <- data.table(chr = dmr_dmls$chr, pos = dmr_dmls$pos)
+
+        for (j in 1:nrow(dmr_dmls)) {
+            dml <- dmr_dmls[j]
+            matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
+            meth_levels <- methylation_data[matching_indices, , drop = FALSE]
+
+            if (!is.null(meth_levels) && nrow(meth_levels) > 0 && ncol(meth_levels) > 0) {
+                plot_data[j, (sample_names) := as.list(meth_levels)]
+            }
+        }
+
+        # Melt the data for plotting
+        plot_data <- melt(plot_data,
+            id.vars = c("chr", "pos"),
+            variable.name = "Sample", value.name = "MethylationLevel"
         )
 
-      print(plot)
-      dev.off()
-    },
-    error = function(e) {
-      # Handle any errors that occur during plotting
-      print(sprintf("Error generating plot: %s", conditionMessage(e)))
-      dev.off() # Ensure device is closed even if there's an error
+        plot_data[, SampleType := ifelse(grepl("^tumour", Sample), "Tumour", "Control")]
+
+        if (nrow(plot_data) == 0) {
+            print(sprintf("No plot data for DMR %s", current_dmr$dmr_id))
+            next
+        }
+
+        # Generate and save the plot
+        output_filename <- file.path(output_dir, "dss", "top_dmls", sprintf("dml_methylation_plot_dmr_%s.svg", current_dmr$dmr_id))
+
+        tryCatch(
+            {
+                num_loci <- nrow(dmr_dmls)
+                num_samples <- length(sample_names)
+                ncol <- min(5, num_loci)
+                nrow <- ceiling(num_loci / ncol)
+
+                plot_width <- max(18, ncol * 2)
+                plot_height <- max(10, nrow * 1.5)
+
+                svglite::svglite(output_filename, width = plot_width, height = plot_height)
+
+                plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
+                    geom_point(size = 2) +
+                    facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) +
+                    theme_bw() +
+                    labs(
+                        title = sprintf("Methylation Levels for DMLs in DMR %s (areaStat: %.2f)", current_dmr$dmr_id, current_dmr$dmr_areaStat),
+                        x = "Sample", y = "Methylation Level"
+                    ) +
+                    scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
+                    scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
+                    theme(
+                        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),
+                        strip.text = element_text(size = 12),
+                        plot.margin = unit(c(1, 1, 1, 1), "cm"),
+                        panel.spacing = unit(1.5, "lines")
+                    )
+
+                print(plot)
+                dev.off()
+
+                print(sprintf("Plot saved for DMR %s", current_dmr$dmr_id))
+            },
+            error = function(e) {
+                print(sprintf("Error generating plot for DMR %s: %s", current_dmr$dmr_id, conditionMessage(e)))
+                dev.off()
+            }
+        )
     }
-  )
-  return(output_filename)
+}
+
+filter_dmls_in_dmrs <- function(dmls, dmrs, output_file) {
+    # Convert DMRs to GRanges
+    dmr_gr <- GRanges(
+        seqnames = dmrs$chr,
+        ranges = IRanges(start = dmrs$start, end = dmrs$end)
+    )
+    mcols(dmr_gr)$areaStat <- dmrs$areaStat
+    mcols(dmr_gr)$dmr_id <- paste(dmrs$chr, dmrs$start, dmrs$end, sep = "_")
+
+    # Convert DMLs to GRanges
+    dml_gr <- GRanges(
+        seqnames = dmls$chr,
+        ranges = IRanges(start = dmls$pos, end = dmls$pos)
+    )
+
+    # Find overlaps
+    overlaps <- findOverlaps(dml_gr, dmr_gr)
+
+    # Subset DMLs that overlap with DMRs
+    filtered_dmls <- dmls[queryHits(overlaps)]
+
+    # Add DMR information to filtered DMLs
+    filtered_dmls[, `:=`(
+        dmr_areaStat = dmrs$areaStat[subjectHits(overlaps)],
+        dmr_hypomethylation_strength = dmrs$hypomethylation_strength[subjectHits(overlaps)],
+        dmr_id = paste(
+            as.character(seqnames(dmr_gr)[subjectHits(overlaps)]),
+            start(dmr_gr)[subjectHits(overlaps)],
+            end(dmr_gr)[subjectHits(overlaps)],
+            sep = "_"
+        )
+    )]
+
+    # Create BED format
+    bed_data <- filtered_dmls[, .(
+        chr = chr,
+        start = pos,
+        end = pos + 2,
+        name = paste("DML", 1:nrow(filtered_dmls), sep = "_"),
+        score = round(-log10(pval), 2),
+        strand = ".",
+        dml_pval = pval,
+        dml_stat = stat,
+        dmr_areaStat = dmr_areaStat,
+        dmr_id = dmr_id,
+        strength = dmr_hypomethylation_strength
+    )]
+
+    # Write to BED file
+    fwrite(bed_data, file = output_file, sep = "\t", col.names = TRUE)
+
+    cat("Filtered DMLs within DMRs saved to:", output_file, "\n")
+    cat("Number of DMLs in DMRs:", nrow(filtered_dmls), "\n")
+
+    return(filtered_dmls)
 }

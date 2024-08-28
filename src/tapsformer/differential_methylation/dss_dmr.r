@@ -133,13 +133,13 @@ perform_dmr_analysis <- function(
 
   dml_dt[, `:=`(
     hypo_in_tumour = diff < 0,
-    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,   
+    significant_after_fdr = p.adjust(pval, method = "BH") < fdr.threshold,
     mean_methylation_diff = abs(diff),
     ci_excludes_zero = sign(diff - (z_score * diff.se)) == sign(diff + (z_score * diff.se))
   )]
 
   if (cross_validation) {
-     dml_dt[, `:=`(consistent = paste(chr, pos) %in% consistent_dmls)]
+    dml_dt[, `:=`(consistent = paste(chr, pos) %in% consistent_dmls)]
   }
 
   # Filter DMLs
@@ -228,6 +228,15 @@ perform_dmr_analysis <- function(
     file.path(output_dir, "dss_high_confidence_hypomethylated_dmrs.bed"),
     sep = "\t"
   )
+
+  # save the differentially methylated DMLs that are accounted for in the DMRs
+  filtered_dmls_in_dmrs <- filter_dmls_in_dmrs(
+    dmls = filtered_dmls,
+    dmrs = top_hypo_dmrs,
+    output_file = file.path(output_dir, "dmls_in_high_confidence_hypomethylated_dmrs.bed")
+  )
+
+  plot_dmls_per_dmr(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 100)
 
   print(table(top_hypo_dmrs$hypomethylation_strength))
 
