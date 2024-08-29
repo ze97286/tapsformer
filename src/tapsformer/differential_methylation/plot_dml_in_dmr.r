@@ -103,7 +103,7 @@ main <- function() {
             "dml_pval", "dml_stat", "dmr_areaStat", "dmr_id", "strength"
         )
     )
-
+    setDT(dml_data)
     
     # Call the plotting function
     plot_dmls_per_dmr(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 20)
