@@ -16,7 +16,7 @@ main <- function() {
 
     # Load DML BED file
     # We're using `fill=TRUE` to handle potential extra columns
-    dml_data <- fread(dml_file, header = FALSE, fill = TRUE)
+    dml_data <- fread(dml_bed_file, header = FALSE, fill = TRUE)
 
     # Check the number of columns and assign appropriate names
     if (ncol(dml_data) == 11) {
