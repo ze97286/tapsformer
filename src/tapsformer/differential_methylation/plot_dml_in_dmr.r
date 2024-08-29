@@ -4,8 +4,8 @@ source("dss_common.r")
 
 main <- function() {
     # Set paths
-    base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/subset3/"
-    output_dir <- file.path(base_dir, "dmr_delta_0.50_p_0.0100_fdr_0.01_minCpG_4_minLen_50_disMerge_50_smooth_cv_window","dml_plots")
+    base_dir <- "/users/zetzioni/sharedscratch/tapsformer/data/methylation/by_cpg/subset3/dmr_delta_0.50_p_0.0100_fdr_0.01_minCpG_4_minLen_50_disMerge_50_smooth_cv_window"
+    output_dir <- file.path(base_dir, "dml_plots")
     combined_bsseq_file <- file.path(base_dir, "combined_bsseq.rds")
     print(combined_bsseq_file)
     dml_bed_file <- file.path(base_dir, "top_dmls/dmls_in_high_confidence_hypomethylated_dmrs.bed")
