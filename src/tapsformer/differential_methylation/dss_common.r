@@ -713,6 +713,8 @@ plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir,
                     stop(sprintf("Cannot write to directory: %s", dirname(output_filename)))
                 }
 
+                plot_width <- max(18, ncol * 2)
+                plot_height <- max(10, nrow * 1.5)
                 svglite::svglite(output_filename, width = plot_width, height = plot_height)
                 plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
                     geom_point(size = 2) +
