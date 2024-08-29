@@ -95,7 +95,6 @@ main <- function() {
     combined_bsseq <- readRDS(combined_bsseq_file)
 
     # Load DML BED file
-    # We're using `fill=TRUE` to handle potential extra columns
     dml_data <- fread(dml_file,
         header = TRUE,
         col.names = c(
@@ -104,10 +103,9 @@ main <- function() {
         )
     )
     setDT(dml_data)
-    
-    # Call the plotting function
-    plot_dmls_per_dmr(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 20)
-}
 
+    # Call the plotting function with dml_data instead of filtered_dmls_in_dmrs
+    plot_dmls_per_dmr(dml_data, combined_bsseq, output_dir, top_n_dmrs = 20)
+}
 # Run the main function
 main()
