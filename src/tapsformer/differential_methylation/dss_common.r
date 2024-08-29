@@ -662,8 +662,7 @@ plot_top_DMLs <- function(top_hypo_dmls, combined_bsseq, output_dir) {
 }
 
 plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 20) {
-    # Get unique DMRs and sort by areaStat to get top N
-    top_dmrs <- unique(filtered_dmls_in_dmrs[order(-dmr_areaStat)][1:top_n_dmrs, .(dmr_id, dmr_areaStat)])
+    top_dmrs <- unique(filtered_dmls_in_dmrs[order(-abs(as.numeric(dmr_areaStat)))][1:top_n_dmrs, .(dmr_id, dmr_areaStat)])
 
     # Get the raw methylation data
     methylation_data <- bsseq::getMeth(combined_bsseq, type = "raw")
@@ -673,11 +672,11 @@ plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir,
         current_dmr <- top_dmrs[i]
         dmr_dmls <- filtered_dmls_in_dmrs[dmr_id == current_dmr$dmr_id]
 
-        plot_data <- data.table(chr = dmr_dmls$chr, pos = dmr_dmls$pos)
+        plot_data <- data.table(chr = dmr_dmls$chr, pos = dmr_dmls$start)
 
         for (j in 1:nrow(dmr_dmls)) {
             dml <- dmr_dmls[j]
-            matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$pos)
+            matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$start)
             meth_levels <- methylation_data[matching_indices, , drop = FALSE]
 
             if (!is.null(meth_levels) && nrow(meth_levels) > 0 && ncol(meth_levels) > 0) {
@@ -703,25 +702,23 @@ plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir,
 
         tryCatch(
             {
-                # Check if directory exists, if not, create it
-                if (!dir.exists(dirname(output_filename))) {
-                    dir.create(dirname(output_filename), recursive = TRUE)
-                }
+                dir.create(dirname(output_filename), showWarnings = FALSE, recursive = TRUE)
 
-                # Check if file can be written
-                if (file.access(dirname(output_filename), mode = 2) == -1) {
-                    stop(sprintf("Cannot write to directory: %s", dirname(output_filename)))
-                }
+                num_loci <- nrow(dmr_dmls)
+                ncol <- min(5, num_loci)
+                nrow <- ceiling(num_loci / ncol)
 
                 plot_width <- max(18, ncol * 2)
                 plot_height <- max(10, nrow * 1.5)
+
                 svglite::svglite(output_filename, width = plot_width, height = plot_height)
+
                 plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
                     geom_point(size = 2) +
                     facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) +
                     theme_bw() +
                     labs(
-                        title = sprintf("Methylation Levels for DMLs in DMR %s (areaStat: %.2f)", current_dmr$dmr_id, current_dmr$dmr_areaStat),
+                        title = sprintf("Methylation Levels for DMLs in DMR %s (areaStat: %s)", current_dmr$dmr_id, current_dmr$dmr_areaStat),
                         x = "Sample", y = "Methylation Level"
                     ) +
                     scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
@@ -740,7 +737,7 @@ plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir,
             },
             error = function(e) {
                 print(sprintf("Error generating plot for DMR %s: %s", current_dmr$dmr_id, conditionMessage(e)))
-                if (!is.null(dev.list())) dev.off() # Close the device only if it's open
+                if (!is.null(dev.list())) dev.off()
             }
         )
     }

@@ -236,7 +236,8 @@ perform_dmr_analysis <- function(
     output_file = file.path(output_dir, "dmls_in_high_confidence_hypomethylated_dmrs.bed")
   )
 
-  plot_dmls_per_dmr(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 100)
+  dmls_in_dmr_output_dir = file.path(output_dir,"dmls_in_dmr")
+  plot_dmls_per_dmr(filtered_dmls_in_dmrs, combined_bsseq, dmls_in_dmr_output_dir, top_n_dmrs = 100)
 
   print(table(top_hypo_dmrs$hypomethylation_strength))
 
