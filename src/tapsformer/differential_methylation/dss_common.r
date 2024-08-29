@@ -699,20 +699,21 @@ plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir,
         }
 
         # Generate and save the plot
-        output_filename <- file.path(output_dir, "dss", "top_dmls", sprintf("dml_methylation_plot_dmr_%s.svg", current_dmr$dmr_id))
+        output_filename <- file.path(output_dir, sprintf("dml_methylation_plot_dmr_%s.svg", gsub(":", "_", current_dmr$dmr_id)))
 
         tryCatch(
             {
-                num_loci <- nrow(dmr_dmls)
-                num_samples <- length(sample_names)
-                ncol <- min(5, num_loci)
-                nrow <- ceiling(num_loci / ncol)
+                # Check if directory exists, if not, create it
+                if (!dir.exists(dirname(output_filename))) {
+                    dir.create(dirname(output_filename), recursive = TRUE)
+                }
 
-                plot_width <- max(18, ncol * 2)
-                plot_height <- max(10, nrow * 1.5)
+                # Check if file can be written
+                if (file.access(dirname(output_filename), mode = 2) == -1) {
+                    stop(sprintf("Cannot write to directory: %s", dirname(output_filename)))
+                }
 
                 svglite::svglite(output_filename, width = plot_width, height = plot_height)
-
                 plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
                     geom_point(size = 2) +
                     facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) +
@@ -737,7 +738,7 @@ plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir,
             },
             error = function(e) {
                 print(sprintf("Error generating plot for DMR %s: %s", current_dmr$dmr_id, conditionMessage(e)))
-                dev.off()
+                if (!is.null(dev.list())) dev.off() # Close the device only if it's open
             }
         )
     }
