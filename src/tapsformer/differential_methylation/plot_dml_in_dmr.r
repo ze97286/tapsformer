@@ -1,6 +1,86 @@
 start_time <- Sys.time()
 
 source("dss_common.r")
+plot_dmls_per_dmr <- function(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 20) {
+  # Get unique DMRs and sort by areaStat to get top N
+  top_dmrs <- unique(filtered_dmls_in_dmrs[order(-abs(as.numeric(dmr_areaStat)))][1:top_n_dmrs, .(dmr_id, dmr_areaStat)])
+  
+  # Get the raw methylation data
+  methylation_data <- bsseq::getMeth(combined_bsseq, type = "raw")
+  sample_names <- colnames(methylation_data)
+  
+  for (i in 1:nrow(top_dmrs)) {
+    current_dmr <- top_dmrs[i]
+    dmr_dmls <- filtered_dmls_in_dmrs[dmr_id == current_dmr$dmr_id]
+    
+    plot_data <- data.table(chr = dmr_dmls$chr, pos = dmr_dmls$start)
+    
+    for (j in 1:nrow(dmr_dmls)) {
+      dml <- dmr_dmls[j]
+      matching_indices <- which(seqnames(combined_bsseq) == dml$chr & start(combined_bsseq) == dml$start)
+      meth_levels <- methylation_data[matching_indices, , drop = FALSE]
+      
+      if (!is.null(meth_levels) && nrow(meth_levels) > 0 && ncol(meth_levels) > 0) {
+        plot_data[j, (sample_names) := as.list(meth_levels)]
+      }
+    }
+    
+    # Melt the data for plotting
+    plot_data <- melt(plot_data,
+      id.vars = c("chr", "pos"),
+      variable.name = "Sample", value.name = "MethylationLevel"
+    )
+    
+    plot_data[, SampleType := ifelse(grepl("^tumour", Sample), "Tumour", "Control")]
+    
+    if (nrow(plot_data) == 0) {
+      print(sprintf("No plot data for DMR %s", current_dmr$dmr_id))
+      next
+    }
+    
+    # Generate and save the plot
+    output_filename <- file.path(output_dir, sprintf("dml_methylation_plot_dmr_%s.svg", gsub(":", "_", current_dmr$dmr_id)))
+    
+    tryCatch({
+      dir.create(dirname(output_filename), showWarnings = FALSE, recursive = TRUE)
+      
+      num_loci <- nrow(dmr_dmls)
+      ncol <- min(5, num_loci)
+      nrow <- ceiling(num_loci / ncol)
+      
+      plot_width <- max(18, ncol * 2)
+      plot_height <- max(10, nrow * 1.5)
+      
+      svglite::svglite(output_filename, width = plot_width, height = plot_height)
+      
+      plot <- ggplot(plot_data, aes(x = Sample, y = MethylationLevel, shape = SampleType, color = SampleType)) +
+        geom_point(size = 2) +
+        facet_wrap(~ chr + pos, scales = "free_y", ncol = ncol) +
+        theme_bw() +
+        labs(
+          title = sprintf("Methylation Levels for DMLs in DMR %s (areaStat: %s)", current_dmr$dmr_id, current_dmr$dmr_areaStat),
+          x = "Sample", y = "Methylation Level"
+        ) +
+        scale_shape_manual(values = c(Tumour = 16, Control = 1)) +
+        scale_color_manual(values = c(Tumour = "blue", Control = "red")) +
+        theme(
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 10),
+          strip.text = element_text(size = 12),
+          plot.margin = unit(c(1, 1, 1, 1), "cm"),
+          panel.spacing = unit(1.5, "lines")
+        )
+      
+      print(plot)
+      dev.off()
+      
+      print(sprintf("Plot saved for DMR %s", current_dmr$dmr_id))
+    },
+    error = function(e) {
+      print(sprintf("Error generating plot for DMR %s: %s", current_dmr$dmr_id, conditionMessage(e)))
+      if (!is.null(dev.list())) dev.off()
+    })
+  }
+}
 
 main <- function() {
     # Set paths
@@ -16,27 +96,15 @@ main <- function() {
 
     # Load DML BED file
     # We're using `fill=TRUE` to handle potential extra columns
-    dml_data <- fread(dml_bed_file, header = FALSE, fill = TRUE)
-
-    # Check the number of columns and assign appropriate names
-    if (ncol(dml_data) == 11) {
-        setnames(dml_data, c("chr", "start", "end", "name", "score", "strand", "dml_pval", "dml_stat", "dmr_areaStat", "dmr_id", "extra_column"))
-    } else if (ncol(dml_data) == 10) {
-        setnames(dml_data, c("chr", "start", "end", "name", "score", "strand", "dml_pval", "dml_stat", "dmr_areaStat", "dmr_id"))
-    } else {
-        stop("Unexpected number of columns in the DML file")
-    }
-    # Convert to GRanges for easier manipulation
-    dml_gr <- GRanges(
-        seqnames = dml_data$chr,
-        ranges = IRanges(start = dml_data$start + 1, end = dml_data$end),
-        mcols = dml_data[, .(name, score, pval, stat, areaStat, dmr_id)]
+    dml_data <- fread(dml_file,
+        header = TRUE,
+        col.names = c(
+            "chr", "start", "end", "name", "score", "strand",
+            "dml_pval", "dml_stat", "dmr_areaStat", "dmr_id", "strength"
+        )
     )
 
-    # Convert back to data.table with correct format for plot_dmls_per_dmr function
-    filtered_dmls_in_dmrs <- as.data.table(dml_gr)
-    setnames(filtered_dmls_in_dmrs, "start", "pos")
-
+    
     # Call the plotting function
     plot_dmls_per_dmr(filtered_dmls_in_dmrs, combined_bsseq, output_dir, top_n_dmrs = 20)
 }
