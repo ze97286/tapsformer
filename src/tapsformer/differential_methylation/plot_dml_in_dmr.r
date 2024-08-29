@@ -8,7 +8,7 @@ main <- function() {
     output_dir <- file.path(base_dir, "dml_plots")
     combined_bsseq_file <- file.path(base_dir, "combined_bsseq.rds")
     print(combined_bsseq_file)
-    dml_bed_file <- file.path(base_dir, "top_dmls/dmls_in_high_confidence_hypomethylated_dmrs.bed")
+    dml_bed_file <- file.path(base_dir, "dmls_in_high_confidence_hypomethylated_dmrs.bed")
     print(dml_bed_file)
 
     # Load combined BSseq object
