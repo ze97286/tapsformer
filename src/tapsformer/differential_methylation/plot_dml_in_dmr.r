@@ -15,9 +15,17 @@ main <- function() {
     combined_bsseq <- readRDS(combined_bsseq_file)
 
     # Load DML BED file
-    dml_data <- fread(dml_bed_file)
-    setnames(dml_data, c("chr", "start", "end", "name", "score", "strand", "pval", "stat", "areaStat", "dmr_id"))
+    # We're using `fill=TRUE` to handle potential extra columns
+    dml_data <- fread(dml_file, header = FALSE, fill = TRUE)
 
+    # Check the number of columns and assign appropriate names
+    if (ncol(dml_data) == 11) {
+        setnames(dml_data, c("chr", "start", "end", "name", "score", "strand", "dml_pval", "dml_stat", "dmr_areaStat", "dmr_id", "extra_column"))
+    } else if (ncol(dml_data) == 10) {
+        setnames(dml_data, c("chr", "start", "end", "name", "score", "strand", "dml_pval", "dml_stat", "dmr_areaStat", "dmr_id"))
+    } else {
+        stop("Unexpected number of columns in the DML file")
+    }
     # Convert to GRanges for easier manipulation
     dml_gr <- GRanges(
         seqnames = dml_data$chr,
