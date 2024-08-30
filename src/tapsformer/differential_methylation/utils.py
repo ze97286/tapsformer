@@ -101,11 +101,11 @@ def methylation_status(read, ref, flag, following_ref_base):
                 meth_status[i] = 1 
             else:
                 meth_status[i] = 0 
-    if following_ref_base=='G' and ref[-1]=='C' and (flag & 99 == 99 or flag & 147 == 147):
-        if read[-1]=='T':
-            meth_status[-1]=1
-        elif read[-1]=='C':
-            meth_status[-1]=0     
+    # if following_ref_base=='G' and ref[-1]=='C' and (flag & 99 == 99 or flag & 147 == 147):
+    #     if read[-1]=='T':
+    #         meth_status[-1]=1
+    #     elif read[-1]=='C':
+    #         meth_status[-1]=0     
     return meth_status
 
 
