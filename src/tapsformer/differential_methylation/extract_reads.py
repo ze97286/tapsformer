@@ -101,7 +101,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                 break
     
     data_dict = {
-        "dmr_id":dmr_ids,
+        # "dmr_id":dmr_ids,
         "methylation_state":mstates,
         "read": reads, 
         "flag": flags,
