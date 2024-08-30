@@ -8,11 +8,11 @@ from tapsformer.differential_methylation.utils import *
 def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
     bam = pysam.AlignmentFile(bam_file)
     pileup_region = load_next_pileup_region2(bam, chr)
-    df = pd.read_csv(os.path.join(TAPSFORMER_DATA_BY_CPG, dmr_dir, "hypomethylated_dmrs.bed"), sep='\t')
-    df['dmr_id']=len(df)-df.index
+    df = pd.read_csv(os.path.join(TAPSFORMER_DATA_BY_CPG, dmr_dir, "Markers.OAC.bed"), sep='\t')
+    # df['dmr_id']=len(df)-df.index
     # filter only very strong hypomethylation regions
-    df = df[df.hypomethylation_strength=='Very Strong']    
-    df = df[(df.chr == chr)]
+    # df = df[df.hypomethylation_strength=='Very Strong']    
+    df = df[df['#chr'] == chr]
     df = df.sort_values(['start'])
     print(f"{len(df)} DMRs with hypomethylation")
     if len(df)==0:
@@ -31,7 +31,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
     idx = 1
     for _, r in df.iterrows():
         start, end = r['start'], r['end']
-        dmr_id = r['dmr_id']
+        # dmr_id = r['dmr_id']
         print(f"Processing DMR {idx}/{len(df)}: {start}-{end}, so far seen {len(reads)} reads")
         idx += 1
 
@@ -78,7 +78,7 @@ def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
                 mstatus=mstatus[skips_start:len(mstatus)-skips_end]
                 reconstructed_read = reconstructed_read[skips_start:len(reconstructed_read)-skips_end]
                 alignment_scores.append(read.get_tag("AS"))
-                dmr_ids.append(dmr_id)
+                # dmr_ids.append(dmr_id)
                 mstates.append(mstatus)
                 mods.append(mstatus.count(1))
                 unmods.append(mstatus.count(0))
