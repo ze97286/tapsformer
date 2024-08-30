@@ -8,7 +8,7 @@ from tapsformer.differential_methylation.utils import *
 def process_chr(chr, bam_file, tumour_tissue, sample, dmr_dir):
     bam = pysam.AlignmentFile(bam_file)
     pileup_region = load_next_pileup_region2(bam, chr)
-    df = pd.read_csv(os.path.join(TAPSFORMER_DATA_BY_CPG, dmr_dir, "Markers.OAC.bed"), sep='\t')
+    df = pd.read_csv(os.path.join(TAPSFORMER_DATA_BY_CPG, "Markers.OAC.bed"), sep='\t')
     # df['dmr_id']=len(df)-df.index
     # filter only very strong hypomethylation regions
     # df = df[df.hypomethylation_strength=='Very Strong']    
