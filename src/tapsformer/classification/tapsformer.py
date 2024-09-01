@@ -119,25 +119,26 @@ def process_methylation(sequence, base_methylation):
             threemer_methylation.append(base_methylation[i])
     return threemer_methylation
 
-
 def tokenize_function(examples):
+    print(f"Original sequence: {examples['sequence'][0]}")  # Print the first sequence
+    print(f"Length of original sequence: {len(examples['sequence'][0])}")
+    
     outputs = tokeniser(
         examples["sequence"],
-        truncation=False,  # No truncation since sequences are all 151 bases long
-        padding=False,  # Avoid padding; sequences should already be the correct length
-        max_length=151,  # Explicitly set to 151 to match the sequence length
+        truncation=False,  # Ensure no truncation
+        padding=False,  # No padding; sequences should already be the correct length
+        max_length=151,  # Ensure max_length is set to 151
     )
+    
+    print(f"Tokenized input_ids: {outputs['input_ids'][0]}")
+    print(f"Length of tokenized input_ids: {len(outputs['input_ids'][0])}")
+    
     processed_methylation = []
     for seq, methyl in zip(examples["sequence"], examples["methylation"]):
-        # Directly use the full sequence length of 151
-        if len(methyl) < 151:
-            padded_methyl = methyl + [-1] * (151 - len(methyl))
-        else:
-            padded_methyl = methyl[:151]
-        processed_methylation.append(padded_methyl)
+        processed_methylation.append(methyl)
+    
     outputs["methylation"] = processed_methylation
     return outputs
-
 
 def prepare_dataset(sequences, labels, methylation_data):
     dataset = Dataset.from_dict(
