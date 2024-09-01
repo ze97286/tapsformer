@@ -53,6 +53,9 @@ class MethylationAwareModel(nn.Module):
         labels=None,
         **kwargs,
     ):
+        print(f"Model is in {'training' if self.training else 'evaluation'} mode.")
+        print(f"Shape of input_ids: {input_ids.shape}")
+
         # Base model forward pass
         outputs = self.base_model.esm(
             input_ids=input_ids,
@@ -60,11 +63,13 @@ class MethylationAwareModel(nn.Module):
             output_hidden_states=True,
             return_dict=True,
         )
-        sequence_output = (
-            outputs.last_hidden_state
-        )  # Shape: (batch_size, 151, hidden_size)
+        sequence_output = outputs.last_hidden_state
+
         # Log the shape of sequence_output
-        print(f"Shape of sequence_output before concatenation: {sequence_output.shape}")
+        print(
+            f"Shape of sequence_output during {'training' if self.training else 'evaluation'}: {sequence_output.shape}"
+        )
+
         # Adjust methylation values
         methylation = methylation + 1  # Adjust to non-negative values
         methylation_one_hot = nn.functional.one_hot(
@@ -251,6 +256,7 @@ def main():
         max_steps=1000,
     )
     trainer = Trainer(
+        # model=lora_model,
         model=lora_model,
         args=training_args,
         train_dataset=train_dataset,
