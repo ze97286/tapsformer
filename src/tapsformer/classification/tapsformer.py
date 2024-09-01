@@ -120,19 +120,28 @@ def process_methylation(sequence, base_methylation):
     return threemer_methylation
 
 def tokenize_function(examples):
-    print(f"Original sequence: {examples['sequence'][0]}")  # Print the first sequence
-    print(f"Length of original sequence: {len(examples['sequence'][0])}")
-    
+    # Print the tokenizer configuration and vocabulary size
+    print(f"Tokenizer config: {tokeniser}")
+    print(f"Tokenizer max length: {tokeniser.model_max_length}")
+    print(f"Tokenizer special tokens: {tokeniser.special_tokens_map}")
+    print(f"Tokenizer vocab size: {tokeniser.vocab_size}")
+
+    # Tokenize a sample sequence and inspect the result
+    sample_sequence = examples["sequence"][0]
+    print(f"Original sequence: {sample_sequence}")
+
+    # Perform tokenization
     outputs = tokeniser(
-        examples["sequence"],
-        truncation=False,  # Ensure no truncation
-        padding=False,  # No padding; sequences should already be the correct length
-        max_length=151,  # Ensure max_length is set to 151
+        sample_sequence,
+        truncation=False,  # No truncation
+        padding=False,  # No padding
+        max_length=151,  # Set max length explicitly to 151
     )
-    
-    print(f"Tokenized input_ids: {outputs['input_ids'][0]}")
-    print(f"Length of tokenized input_ids: {len(outputs['input_ids'][0])}")
-    
+
+    # Print the tokenized output
+    print(f"Tokenized input_ids: {outputs['input_ids']}")
+    print(f"Length of tokenized input_ids: {len(outputs['input_ids'])}")
+        
     processed_methylation = []
     for seq, methyl in zip(examples["sequence"], examples["methylation"]):
         processed_methylation.append(methyl)
